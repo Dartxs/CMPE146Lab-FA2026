@@ -78,6 +78,12 @@
         "DOECLR",
         "PIPD",
         "PIPU",
-        "INENA"
+        "INENA",
+        "PWREN",
+        "RSTCTL",
+        "pwren",
+        "rstctl",
+        "outpin",
+        "inpin"
     ]
 }
