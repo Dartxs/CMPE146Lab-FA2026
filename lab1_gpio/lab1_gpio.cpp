@@ -346,47 +346,17 @@ int main()
       red_led.level(true);
       green_led.level(true);
 
-      for (volatile int i = 0; i < 1000000; i++)
-        ;
-
-      blue_led.level(false);
-      red_led.level(false);
-      green_led.level(false);
-
-      for (volatile int i = 0; i < 1000000; i++)
-        ;
-
     } else if (sw1.level()) {
 
       blue_led.level(false);
       red_led.level(true);
       green_led.level(true);
 
-      for (volatile int i = 0; i < 1000000; i++)
-        ;
-
-      blue_led.level(false);
-      red_led.level(false);
-      green_led.level(false);
-
-      for (volatile int i = 0; i < 1000000; i++)
-        ;
-
     } else if (!sw2.level()) {
 
       blue_led.level(true);
       red_led.level(true);
       green_led.level(false);
-
-      for (volatile int i = 0; i < 1000000; i++)
-        ;
-
-      blue_led.level(false);
-      red_led.level(false);
-      green_led.level(false);
-
-      for (volatile int i = 0; i < 1000000; i++)
-        ;
 
     } else {
 
