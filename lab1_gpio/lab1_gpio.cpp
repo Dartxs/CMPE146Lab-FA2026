@@ -231,6 +231,11 @@ bool msp0g_outpin::driver_configure(const settings& p_settings)
     *pincm_reg &= ~hiz1_mask;
   }
 
+  auto* gpio_reg = gpio(m_gpio_pin.port);
+  std::uint32_t pin_mask = (1U << m_gpio_pin.pin);
+
+  gpio_reg->DOESET31_0 = pin_mask;
+
   return true;
 }
 
@@ -243,10 +248,8 @@ void msp0g_outpin::driver_level(bool p_high)
 
   if (p_high) {
     gpio_reg->DOUTSET31_0 = pin_mask;
-    gpio_reg->DOESET31_0 = pin_mask;
   } else {
     gpio_reg->DOUTCLR31_0 = pin_mask;
-    gpio_reg->DOECLR31_0 = pin_mask;
   }
 }
 
