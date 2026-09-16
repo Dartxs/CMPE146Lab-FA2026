@@ -2,15 +2,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "lab2_interrupt_timer_pwm",
-            "type": "ccs-debug",
-            "request": "launch",
-            "projectInfo": {
-                "name": "lab2_interrupt_timer_pwm",
-                "resourceId": "/lab2_interrupt_timer_pwm"
-            }
-        },
-        {
             "name": "lab3_spi",
             "type": "ccs-debug",
             "request": "launch",
