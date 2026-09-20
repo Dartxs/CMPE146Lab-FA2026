@@ -7,5 +7,5 @@ AllowShortFunctionsOnASingleLine: None
 FixNamespaceComments: true
 SpacesBeforeTrailingComments: 2
 ColumnLimit: 80
-QualifierAlignment: Right
+QualifierAlignment: Left
 InsertNewlineAtEOF: true
