@@ -56,7 +56,7 @@ namespace msp0g{
          * @brief Constructor for output pin. 
          *
          * @param p_gpio_pin GPIO pin description passed as struct
-         * @param p_settings Initial settings, default if omittec.
+         * @param p_settings Initial settings, default (no pu/pd, open_drain disabled) if omitted.
          *                 
          * If p_gpio_pin contains out of bounds values, configuration 
          * is ignored and the pin will not work. 
@@ -84,7 +84,7 @@ namespace msp0g{
          * @brief Constructor for input pin.
          *
          * @param p_gpio_pin GPIO pin description passed as struct
-         * @param p_settings Initial settings, default if omitted.
+         * @param p_settings Initial settings, default (pullup) if omitted.
          *                 
          * If p_gpio_pin contains out of bounds values, configuration 
          * is ignored and the pin will not work.                

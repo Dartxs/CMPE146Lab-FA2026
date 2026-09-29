@@ -28,7 +28,7 @@ namespace{
 
 namespace msp0g{
 
-    msp0g_iomux::msp0g_iomux(const iomux_config& p_iomux_config, const iomux_settings& p_iomux_settings = {lab1::pin_resistor::none, false}){
+    msp0g_iomux::msp0g_iomux(const iomux_config& p_iomux_config, const iomux_settings& p_iomux_settings){
 
         m_pincm = p_iomux_config.pincm;
         m_pf_sel = p_iomux_config.pf_sel;
