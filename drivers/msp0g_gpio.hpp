@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "../hal/gpio.hpp"
+#include "msp0g_iomux.hpp"
 
 // Peripheral Base Addresses:
 // GPIOA = 0x400A0000, GPIOB = 0x400A2000
@@ -69,9 +70,10 @@ namespace msp0g{
 
         bool driver_level() override;
 
-        gpio_pin m_gpio_pin;
-        std::uint32_t m_pin_mask;
-        bool m_valid_pin;
+        msp0g_iomux m_pincm;
+        std::uint32_t m_pin_mask = 0U;
+        gpio_port m_port;
+        bool m_valid_pin = false;
     };
 
     class msp0g_inpin : public lab1::input_pin
@@ -94,8 +96,9 @@ namespace msp0g{
 
         bool driver_level() override;
 
-        gpio_pin m_gpio_pin;
+        msp0g_iomux m_pincm;
         std::uint32_t m_pin_mask = 0U;
+        gpio_port m_port;
         bool m_valid_pin = false;
     };
 
