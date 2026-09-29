@@ -35,79 +35,82 @@
 // INENA = bit 18, allows the peripheral to be read by MCU
 // HIZ1 = bit 25, high impedance/open-drain
 
-namespace msp0g{
+namespace msp0g {
 
-    enum class gpio_port : std::uint8_t{
-        a,
-        b
-    };
+enum class gpio_port : std::uint8_t
+{
+  a,
+  b
+};
 
-    struct gpio_pin{
-        gpio_port port;
-        std::uint8_t pin;
-        std::uint8_t pincm;
-    };
+struct gpio_pin
+{
+  gpio_port port;
+  std::uint8_t pin;
+  std::uint8_t pincm;
+};
 
-    class msp0g_outpin : public lab1::output_pin
-    {
+class msp0g_outpin : public lab1::output_pin
+{
 
-    public:
-        /**
-         * @brief Constructor for output pin. 
-         *
-         * @param p_gpio_pin GPIO pin description passed as struct
-         * @param p_settings Initial settings, default (no pu/pd, open_drain disabled) if omitted.
-         *                 
-         * If p_gpio_pin contains out of bounds values, configuration 
-         * is ignored and the pin will not work. 
-         */
-        msp0g_outpin(const gpio_pin& p_gpio_pin, const settings& p_settings = {});
+public:
+  /**
+   * @brief Constructor for output pin.
+   *
+   * @param p_gpio_pin GPIO pin description passed as struct
+   * @param p_settings Initial settings, default (no pu/pd, open_drain disabled)
+   * if omitted.
+   *
+   * If p_gpio_pin contains out of bounds values, configuration
+   * is ignored and the pin will not work.
+   */
+  msp0g_outpin(const gpio_pin& p_gpio_pin, const settings& p_settings = {});
 
-    private:
-        bool driver_configure(const settings& p_settings) override;
+private:
+  bool driver_configure(const settings& p_settings) override;
 
-        void driver_level(bool p_high) override;
+  void driver_level(bool p_high) override;
 
-        bool driver_level() override;
+  bool driver_level() override;
 
-        msp0g_iomux m_pincm;
-        std::uint32_t m_pin_mask = 0U;
-        gpio_port m_port;
-        bool m_valid_pin = false;
-    };
+  msp0g_iomux m_pincm;
+  std::uint32_t m_pin_mask = 0U;
+  gpio_port m_port;
+  bool m_valid_pin = false;
+};
 
-    class msp0g_inpin : public lab1::input_pin
-    {
+class msp0g_inpin : public lab1::input_pin
+{
 
-    public:
-        /**
-         * @brief Constructor for input pin.
-         *
-         * @param p_gpio_pin GPIO pin description passed as struct
-         * @param p_settings Initial settings, default (pullup) if omitted.
-         *                 
-         * If p_gpio_pin contains out of bounds values, configuration 
-         * is ignored and the pin will not work.                
-         */
-        msp0g_inpin(const gpio_pin& p_gpio_pin, const settings& p_settings = {});
+public:
+  /**
+   * @brief Constructor for input pin.
+   *
+   * @param p_gpio_pin GPIO pin description passed as struct
+   * @param p_settings Initial settings, default (pullup) if omitted.
+   *
+   * If p_gpio_pin contains out of bounds values, configuration
+   * is ignored and the pin will not work.
+   */
+  msp0g_inpin(const gpio_pin& p_gpio_pin, const settings& p_settings = {});
 
-    private:
-        bool driver_configure(const settings& p_settings) override;
+private:
+  bool driver_configure(const settings& p_settings) override;
 
-        bool driver_level() override;
+  bool driver_level() override;
 
-        msp0g_iomux m_pincm;
-        std::uint32_t m_pin_mask = 0U;
-        gpio_port m_port;
-        bool m_valid_pin = false;
-    };
+  msp0g_iomux m_pincm;
+  std::uint32_t m_pin_mask = 0U;
+  gpio_port m_port;
+  bool m_valid_pin = false;
+};
 
-    /**
-    * @brief Powers on and resets GPIO port.
-    *
-    * @param p_port Port to initialize.
-    *                             
-    */
-    void initialize_gpio_port(gpio_port p_port);
+/**
+ * @brief Powers on and resets GPIO port.
+ *
+ * @param p_port Port to initialize.
+ *
+ */
+void initialize_gpio_port(gpio_port p_port);
 
-}
+}  // namespace msp0g

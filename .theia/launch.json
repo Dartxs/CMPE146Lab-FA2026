@@ -45,6 +45,15 @@
                 "name": "lab1_gpio",
                 "resourceId": "/lab1_gpio"
             }
+        },
+        {
+            "name": "lab2_interrupt_timer_pwm",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "lab2_interrupt_timer_pwm",
+                "resourceId": "/lab2_interrupt_timer_pwm"
+            }
         }
     ]
 }
