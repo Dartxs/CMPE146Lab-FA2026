@@ -13,8 +13,8 @@ struct timer_state
   std::uint8_t channels;
 };
 
-timer_state
-  timers[4];  // index 0 corresponds to timg0, 1 = timg6, 2 = timg7, 3 = timg8
+// index 0 corresponds to timg0, 1 = timg6, 2 = timg7, 3 = timg8
+timer_state timers[4]; 
 
 // array to store base addresses for timg0, timg6, timg7, timg8
 constexpr std::uintptr_t timg_bases[4] = { 0x4008'4000,
@@ -36,9 +36,8 @@ constexpr std::uintptr_t timg12_base = 0x4087'0000;
 constexpr std::uintptr_t pwren_offset = 0x0800;
 constexpr std::uintptr_t rstctl_offset = 0x0804;
 
-// set low 3 bits to 0-7 to divide clock by 1-8. ex. 0 = no divide, 7 = divide
-// by
-// 8
+// set low 3 bits to 0-7 to divide clock by 1-8. ex. 0 = no divide, 
+// 7 = divide by 8
 constexpr std::uintptr_t clkdiv_offset = 0x1000;
 constexpr std::uintptr_t clksel_offset =
   0x1008;  // set bit 3 = BUSCLK, 2 = MFCLK, 1 = LFCLK
@@ -147,9 +146,9 @@ msp0g_pwm::msp0g_pwm(const pwm_config& p_config)
   auto index = static_cast<std::uint8_t>(p_config.timer);
 
   m_per_count = pwm_timer_frequency / p_config.freq;
-  m_pwm_freq =
-    pwm_timer_frequency /
-    m_per_count;  // could be different from requested freq due to truncation
+
+  // could be different from requested freq due to truncation
+  m_pwm_freq = pwm_timer_frequency / m_per_count;
   m_timer_base = timg_bases[index];
   m_channel = static_cast<std::uint8_t>(p_config.cc);
 
@@ -210,3 +209,4 @@ void msp0g_pwm::driver_duty_cycle(std::uint16_t p_duty_cycle)
 }
 
 }  // namespace msp0g
+

@@ -4,7 +4,6 @@
 #include <cstdio>
 #include <limits>
 
-#include "../drivers/msp0g_gpio.hpp"
 #include "../drivers/msp0g_iomux.hpp"
 #include "../drivers/msp0g_timer.hpp"
 #include "../hal/gpio.hpp"
