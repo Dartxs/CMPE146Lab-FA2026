@@ -54,7 +54,7 @@ namespace msp0g {
 
 msp0g_outpin::msp0g_outpin(const gpio_pin& p_gpio_pin,
                            const settings& p_settings)
-  : m_pincm({ p_gpio_pin.pincm, pf_gpio, input_enable::disable },
+  : m_pincm({ p_gpio_pin.pincm, pf_gpio, input_enable::enable },
             { p_settings.resistor, p_settings.open_drain })
   , m_port(p_gpio_pin.port)
 {
@@ -80,7 +80,7 @@ bool msp0g_outpin::driver_configure(const settings& p_settings)
     return false;
   }
 
-  m_pincm.config({ p_settings.resistor, p_settings.open_drain });
+  m_pincm.config({ p_settings.resistor, p_settings.open_drain});
 
   return true;
 }

@@ -38,7 +38,7 @@ msp0g_iomux::msp0g_iomux(const iomux_config& p_iomux_config,
   m_pincm = p_iomux_config.pincm;
   m_pf_sel = p_iomux_config.pf_sel;
 
-  if (m_pincm > 58 || m_pf_sel > 0x3F) {
+  if (m_pincm <= 0 || m_pincm > 58 || m_pf_sel > 0x3F) {
 
     m_valid = false;
     return;
@@ -67,10 +67,12 @@ void msp0g_iomux::config(const iomux_settings& p_iomux_settings)
 
     if (p_iomux_settings.resistor == lab1::pin_resistor::pull_down) {
 
+      *pincm_reg &= ~pipu_mask;
       *pincm_reg |= pipd_mask;
 
     } else if (p_iomux_settings.resistor == lab1::pin_resistor::pull_up) {
 
+      *pincm_reg &= ~pipd_mask;
       *pincm_reg |= pipu_mask;
 
     } else {
