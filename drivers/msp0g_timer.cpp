@@ -82,11 +82,11 @@ volatile std::uint32_t* reg(std::uintptr_t p_base, std::uintptr_t p_offset)
   return reinterpret_cast<volatile uint32_t*>(p_base + p_offset);
 }
 
-void initialize_timer(std::uintptr_t p_offset)
+void initialize_timer(std::uintptr_t p_base)
 {
 
-  auto* pwren = reg(p_offset, pwren_offset);
-  auto* rstctl = reg(p_offset, rstctl_offset);
+  auto* pwren = reg(p_base, pwren_offset);
+  auto* rstctl = reg(p_base, rstctl_offset);
 
   *rstctl = rstctl_mask;
   *pwren = pwren_mask;
