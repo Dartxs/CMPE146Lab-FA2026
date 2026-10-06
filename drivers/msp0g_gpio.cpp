@@ -80,7 +80,7 @@ bool msp0g_outpin::driver_configure(const settings& p_settings)
     return false;
   }
 
-  m_pincm.config({ p_settings.resistor, p_settings.open_drain});
+  m_pincm.config({ p_settings.resistor, p_settings.open_drain });
 
   return true;
 }

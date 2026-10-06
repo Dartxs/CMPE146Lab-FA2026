@@ -14,7 +14,7 @@ struct timer_state
 };
 
 // index 0 corresponds to timg0, 1 = timg6, 2 = timg7, 3 = timg8
-timer_state timers[4]; 
+timer_state timers[4];
 
 // array to store base addresses for timg0, timg6, timg7, timg8
 constexpr std::uintptr_t timg_bases[4] = { 0x4008'4000,
@@ -36,7 +36,7 @@ constexpr std::uintptr_t timg12_base = 0x4087'0000;
 constexpr std::uintptr_t pwren_offset = 0x0800;
 constexpr std::uintptr_t rstctl_offset = 0x0804;
 
-// set low 3 bits to 0-7 to divide clock by 1-8. ex. 0 = no divide, 
+// set low 3 bits to 0-7 to divide clock by 1-8. ex. 0 = no divide,
 // 7 = divide by 8
 constexpr std::uintptr_t clkdiv_offset = 0x1000;
 constexpr std::uintptr_t clksel_offset =
@@ -196,11 +196,19 @@ msp0g_pwm::msp0g_pwm(const pwm_config& p_config)
 std::uint32_t msp0g_pwm::driver_frequency()
 {
 
+  if (!m_valid) {
+    return 0;
+  }
+
   return m_pwm_freq;
 }
 
 void msp0g_pwm::driver_duty_cycle(std::uint16_t p_duty_cycle)
 {
+
+  if (!m_valid) {
+    return;
+  }
 
   auto* cc_01 = reg(m_timer_base, cc_01_offset + (m_channel * 4));
 
@@ -209,4 +217,3 @@ void msp0g_pwm::driver_duty_cycle(std::uint16_t p_duty_cycle)
 }
 
 }  // namespace msp0g
-

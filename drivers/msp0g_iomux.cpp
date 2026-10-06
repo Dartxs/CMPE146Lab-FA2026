@@ -61,33 +61,35 @@ msp0g_iomux::msp0g_iomux(const iomux_config& p_iomux_config,
 void msp0g_iomux::config(const iomux_settings& p_iomux_settings)
 {
 
-  if (m_valid) {
+  if (!m_valid) {
 
-    auto* pincm_reg = pincm(m_pincm);
+    return;
+  }
 
-    if (p_iomux_settings.resistor == lab1::pin_resistor::pull_down) {
+  auto* pincm_reg = pincm(m_pincm);
 
-      *pincm_reg &= ~pipu_mask;
-      *pincm_reg |= pipd_mask;
+  if (p_iomux_settings.resistor == lab1::pin_resistor::pull_down) {
 
-    } else if (p_iomux_settings.resistor == lab1::pin_resistor::pull_up) {
+    *pincm_reg &= ~pipu_mask;
+    *pincm_reg |= pipd_mask;
 
-      *pincm_reg &= ~pipd_mask;
-      *pincm_reg |= pipu_mask;
+  } else if (p_iomux_settings.resistor == lab1::pin_resistor::pull_up) {
 
-    } else {
+    *pincm_reg &= ~pipd_mask;
+    *pincm_reg |= pipu_mask;
 
-      *pincm_reg = *pincm_reg & ~pipu_mask & ~pipd_mask;
-    }
+  } else {
 
-    if (p_iomux_settings.open_drain) {
+    *pincm_reg = *pincm_reg & ~pipu_mask & ~pipd_mask;
+  }
 
-      *pincm_reg |= hiz1_mask;
+  if (p_iomux_settings.open_drain) {
 
-    } else {
+    *pincm_reg |= hiz1_mask;
 
-      *pincm_reg &= ~hiz1_mask;
-    }
+  } else {
+
+    *pincm_reg &= ~hiz1_mask;
   }
 }
 
