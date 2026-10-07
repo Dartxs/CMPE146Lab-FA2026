@@ -1,11 +1,12 @@
 #include <cstdint>
 #include <cmath>
+#include <array>
 
 #include "msp0g_spi.hpp"
 
 namespace{
 
-    bool spi_init[2] = {false, false};
+    std::array<bool, 2> spi_init = {false, false};
 
     constexpr std::uintptr_t spi0_base = 0x40468000;
     constexpr std::uintptr_t spi1_base = 0x4046A000;
