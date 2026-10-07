@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdint>
 
 #include "msp0g_gpio.hpp"
@@ -19,6 +20,8 @@ constexpr std::uint32_t pwren_mask = 0x2600'0001;
 constexpr std::uint32_t rstctl_mask = 0xB100'0001;
 
 constexpr std::uint8_t pf_gpio = 0x01;
+
+std::array<bool, 2> gpio_init = { false, false };
 
 volatile std::uint32_t* gpio_reg(msp0g::gpio_port p_port,
                                  std::uintptr_t p_offset)
@@ -48,6 +51,19 @@ bool valid_pin(msp0g::gpio_port p_port, std::uint8_t p_pin)
   return (p_pin <= 27);
 }
 
+void initialize_gpio_port(msp0g::gpio_port p_port)
+{
+
+  auto* rstctl = gpio_reg(p_port, rstctl_offset);
+  auto* pwren = gpio_reg(p_port, pwren_offset);
+
+  *rstctl = rstctl_mask;
+  *pwren = pwren_mask;
+
+  for (volatile int i = 0; i < 16; i++)
+    ;  // required delay after setting PWREN
+}
+
 }  // namespace
 
 namespace msp0g {
@@ -62,6 +78,13 @@ msp0g_outpin::msp0g_outpin(const gpio_pin& p_gpio_pin,
   m_valid_pin = valid_pin(m_port, p_gpio_pin.pin) && m_pincm.valid_pincm();
 
   if (m_valid_pin) {
+
+    if (!gpio_init[static_cast<uint8_t>(m_port)]) {
+
+      initialize_gpio_port(m_port);
+
+      gpio_init[static_cast<uint8_t>(m_port)] = true;
+    }
 
     m_pin_mask = 1U << p_gpio_pin.pin;
 
@@ -130,6 +153,13 @@ msp0g_inpin::msp0g_inpin(const gpio_pin& p_gpio_pin, const settings& p_settings)
 
   if (m_valid_pin) {
 
+    if (!gpio_init[static_cast<uint8_t>(m_port)]) {
+
+      initialize_gpio_port(m_port);
+
+      gpio_init[static_cast<uint8_t>(m_port)] = true;
+    }
+
     m_pin_mask = 1U << p_gpio_pin.pin;
 
     configure(p_settings);
@@ -163,19 +193,6 @@ bool msp0g_inpin::driver_level()
   auto* din = gpio_reg(m_port, din_offset);
 
   return (*din & m_pin_mask);
-}
-
-void initialize_gpio_port(gpio_port p_port)
-{
-
-  auto* rstctl = gpio_reg(p_port, rstctl_offset);
-  auto* pwren = gpio_reg(p_port, pwren_offset);
-
-  *rstctl = rstctl_mask;
-  *pwren = pwren_mask;
-
-  for (volatile int i = 0; i < 16; i++)
-    ;  // required delay after setting PWREN
 }
 
 }  // namespace msp0g

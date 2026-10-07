@@ -39,7 +39,7 @@ namespace msp0g {
 
 enum class gpio_port : std::uint8_t
 {
-  a,
+  a = 0,
   b
 };
 
@@ -104,13 +104,5 @@ private:
   gpio_port m_port;
   bool m_valid_pin = false;
 };
-
-/**
- * @brief Powers on and resets GPIO port.
- *
- * @param p_port Port to initialize.
- *
- */
-void initialize_gpio_port(gpio_port p_port);
 
 }  // namespace msp0g

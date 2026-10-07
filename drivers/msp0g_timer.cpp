@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdint>
 
 #include "msp0g_timer.hpp"
@@ -14,13 +15,13 @@ struct timer_state
 };
 
 // index 0 corresponds to timg0, 1 = timg6, 2 = timg7, 3 = timg8
-timer_state timers[4];
+std::array<timer_state, 4> timers;
 
 // array to store base addresses for timg0, timg6, timg7, timg8
-constexpr std::uintptr_t timg_bases[4] = { 0x4008'4000,
-                                           0x4086'8000,
-                                           0x4086'A000,
-                                           0x4009'0000 };
+constexpr std::array<uint32_t, 4> timg_bases = { 0x4008'4000,
+                                                 0x4086'8000,
+                                                 0x4086'A000,
+                                                 0x4009'0000 };
 
 constexpr std::uint32_t steady_clock_frequency = 4'000'000;
 constexpr std::uint32_t pwm_timer_frequency = 1'000'000;
@@ -78,7 +79,7 @@ constexpr std::uint32_t zact_sethigh =
 
 volatile std::uint32_t* reg(std::uintptr_t p_base, std::uintptr_t p_offset)
 {
-
+  // NOLINTNEXTLINE(performance-no-int-to-ptr): MMIO register access
   return reinterpret_cast<volatile uint32_t*>(p_base + p_offset);
 }
 
@@ -102,6 +103,7 @@ namespace msp0g {
 msp0g_steady_clock::msp0g_steady_clock()
 {
 
+  m_uptime = 0;
   m_prev_count = 0;
 
   initialize_timer(
@@ -191,6 +193,8 @@ msp0g_pwm::msp0g_pwm(const pwm_config& p_config)
   *ccact_01 = cuact_setlow | zact_sethigh;
 
   timers[index].channels |= cc_mask;
+
+  m_valid = true;
 }
 
 std::uint32_t msp0g_pwm::driver_frequency()
