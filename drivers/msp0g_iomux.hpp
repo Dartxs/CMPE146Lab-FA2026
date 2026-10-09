@@ -7,8 +7,7 @@
 namespace msp0g {
 
 /**
- * @brief Removes the need for a boolean inena
- *
+ * @brief Select whether the pin's input path is enabled through INENA.
  */
 enum class input_enable
 {
@@ -16,56 +15,59 @@ enum class input_enable
   enable
 };
 
+/** @brief Electrical settings that can be changed after pin selection. */
 struct iomux_settings
 {
 
-  lab1::pin_resistor resistor = lab1::pin_resistor::none;
-  bool open_drain = false;
+  lab1::pin_resistor resistor =
+    lab1::pin_resistor::none;  ///< Pull resistor choice.
+  bool open_drain = false;     ///< Enable open-drain operation when true.
 };
 
+/** @brief Pin, peripheral function, and input path selected at construction. */
 struct iomux_config
 {
 
-  uint8_t pincm;
-  uint8_t pf_sel;
-  input_enable inena = input_enable::disable;
+  uint8_t pincm;   ///< One-based PINCM register number, from 1 to 58.
+  uint8_t pf_sel;  ///< Peripheral function selector, from 0 to 0x3F.
+  input_enable inena = input_enable::disable;  ///< Input path selection.
 };
 
+/** @brief Select a pin's peripheral function and configure its electrical
+ * state. */
 class msp0g_iomux
 {
 
 public:
   /**
-   * @brief Constructor for iomux.
+   * @brief Select the pin function, connect the pin, and apply initial
+   * settings.
    *
-   * @param p_iomux_config Struct containing initial settings {pincm, pf_sel,
-   * inena}.
-   * @param p_iomux_settings Struct containing initial configuration {resistor,
-   * open_drain}, defaults to no resistor and open_drain disable.
+   * @param p_iomux_config PINCM number, peripheral selector, and input enable.
+   * @param p_iomux_settings Pull resistor and open-drain configuration.
    *
-   * pincm is boundary checked resulting in an invalid and unusable pin.
-   * pf_sel is checked to ensure it's <= 0x3F, but doesn't check whether a
-   * peripheral actually maps to that sel.
-   *
+   * @note PINCM must be 1-58 and the selector must be at most 0x3F. Invalid
+   *       values leave the object unusable without writing the PINCM register.
+   *       The caller must check that the selected function exists on the pin.
    */
   msp0g_iomux(const iomux_config& p_iomux_config,
               const iomux_settings& p_iomux_settings);
 
   /**
-   * @brief Function to modify resistor/open drain settings for pin
+   * @brief Apply the pin's pull resistor and open-drain settings.
    *
-   * @param p_iomux_settings Struct containing settings {pincm, pf_sel, inena}.
-   *
-   *
+   * @param p_iomux_settings Resistor choice and open-drain enable state.
+   * @note Enabling either pull resistor clears the other; selecting none
+   *       clears both. Pin function and input enable are unchanged.
+   *       Does nothing if construction left the object invalid.
    */
   void config(const iomux_settings& p_iomux_settings);
 
   /**
-   * @brief Check whether pin configuration is valid
+   * @brief Report whether construction accepted the PINCM and selector ranges.
    *
-   * @return bool - TRUE = valid pin, FALSE = invalid pin, object will not
-   * control hardware
-   *
+   * @return True for an accepted configuration; false for an invalid object.
+   * @note Does not verify that the peripheral function exists on this pin.
    */
   bool valid_pincm();
 

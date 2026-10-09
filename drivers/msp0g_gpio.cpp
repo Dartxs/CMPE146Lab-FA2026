@@ -21,6 +21,8 @@ constexpr std::uint32_t rstctl_mask = 0xB100'0001;
 
 constexpr std::uint8_t pf_gpio = 0x01;
 
+/** @brief Track port initialization to avoid resetting an already active port.
+ */
 std::array<bool, 2> gpio_init = { false, false };
 
 volatile std::uint32_t* gpio_reg(msp0g::gpio_port p_port,

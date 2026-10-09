@@ -5,13 +5,15 @@
 
 namespace {
 
-// to keep track of the state for each timer
+/** @brief Track the frequency and occupied channels of each shared PWM timer.
+ */
 struct timer_state
 {
 
-  std::uint32_t freq;
-  bool initiated;
-  std::uint8_t channels;
+  std::uint32_t freq;  ///< Calculated PWM frequency shared by both channels.
+  bool initiated;      ///< Whether this driver has initialized the timer.
+  std::uint8_t
+    channels;  ///< Bitmask of channels already reserved by PWM objects.
 };
 
 // index 0 corresponds to timg0, 1 = timg6, 2 = timg7, 3 = timg8
@@ -40,19 +42,22 @@ constexpr std::uintptr_t rstctl_offset = 0x0804;
 // set low 3 bits to 0-7 to divide clock by 1-8. ex. 0 = no divide,
 // 7 = divide by 8
 constexpr std::uintptr_t clkdiv_offset = 0x1000;
-constexpr std::uintptr_t clksel_offset =
-  0x1008;  // set bit 3 = BUSCLK, 2 = MFCLK, 1 = LFCLK
 
-constexpr std::uintptr_t ccpd_offset =
-  0x1100;  // configure CCP direction (input or output)
-constexpr std::uintptr_t cps_offset =
-  0x110C;  // set low byte to further divide clock
+// set bit 3 = BUSCLK, 2 = MFCLK, 1 = LFCLK
+constexpr std::uintptr_t clksel_offset = 0x1008;
+
+// configure CCP direction (input or output)
+constexpr std::uintptr_t ccpd_offset = 0x1100;
+
+// set low byte to further divide clock
+constexpr std::uintptr_t cps_offset = 0x110C;
 constexpr std::uintptr_t ctr_offset = 0x1800;  // register storing timer count
 
 // see data sheet, configures start value, count up/down, and more
 constexpr std::uintptr_t ctrctl_offset = 0x1804;
-constexpr std::uintptr_t load_offset =
-  0x1808;  // set low 2 bytes, value loaded to timer
+
+// set low 2 bytes, value loaded to timer
+constexpr std::uintptr_t load_offset = 0x1808;
 
 // offsets for channel 0/1 capture/compare registers, add 4 for channel 1
 constexpr std::uintptr_t cc_01_offset = 0x1810;
@@ -67,15 +72,18 @@ constexpr std::uint32_t busclk_mask = 1 << 3;
 // ctrctl
 constexpr std::uint32_t cvae_zero = 0x2 << 28;  // value set after enabling, 2=0
 constexpr std::uint32_t cm_up = 0x2 << 4;       // count mode 2=up
-constexpr std::uint32_t repeat_cont =
-  0x1 << 1;  // whether to repeat if 0, 0 = no repeat, 1 = continue
+
+// repeat if 0, 0 = no repeat, 1 = continue
+constexpr std::uint32_t repeat_cont = 0x1 << 1;
 constexpr std::uint32_t en_mask = 0x1;  // enables counter, set to enable
 
 // ccact
-constexpr std::uint32_t cuact_setlow =
-  0x2 << 9;  // set output low during compare event while counting up
-constexpr std::uint32_t zact_sethigh =
-  0x1;  // set output high when zero event occurs
+
+// set output low during compare event while counting up
+constexpr std::uint32_t cuact_setlow = 0x2 << 9;
+
+// set output high when zero event occurs
+constexpr std::uint32_t zact_sethigh = 0x1;
 
 volatile std::uint32_t* reg(std::uintptr_t p_base, std::uintptr_t p_offset)
 {
@@ -106,8 +114,8 @@ msp0g_steady_clock::msp0g_steady_clock()
   m_uptime = 0;
   m_prev_count = 0;
 
-  initialize_timer(
-    timg12_base);  // using timg12 because it has 32-bit resolution, but no cps
+  // using timg12 because it has 32-bit resolution, but no cps
+  initialize_timer(timg12_base);
 
   auto* clkdiv = reg(timg12_base, clkdiv_offset);
   auto* clksel = reg(timg12_base, clksel_offset);

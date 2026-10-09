@@ -7,12 +7,10 @@
 namespace msp0g {
 
 /**
- * @brief Set of gp timers that can be used for pwm
+ * @brief Select a general-purpose timer supported by the PWM driver.
  *
- * timg0, timg6, timg7, timg8
- *
- * timg12 not available due to lack of prescaler
- *
+ * Supports TIMG0, TIMG6, TIMG7, and TIMG8. TIMG12 is reserved for the steady
+ * clock and does not have the prescaler used by this PWM implementation.
  */
 enum class pwm_timer : std::uint8_t
 {
@@ -23,10 +21,7 @@ enum class pwm_timer : std::uint8_t
 };
 
 /**
- * @brief Set of channels that can be used for pwm
- *
- * cc0, cc1
- *
+ * @brief Select capture/compare channel 0 or 1 for PWM output.
  */
 enum class pwm_timer_channel : std::uint8_t
 {
@@ -34,24 +29,31 @@ enum class pwm_timer_channel : std::uint8_t
   cc1
 };
 
+/** @brief Requested PWM frequency and timer/channel selection. */
 struct pwm_config
 {
 
-  std::uint32_t freq;
-  pwm_timer timer;
-  pwm_timer_channel cc;
+  std::uint32_t freq;  ///< Requested PWM frequency in Hz, from 16 to 1,000,000.
+  pwm_timer timer;     ///< Timer providing the PWM period.
+  pwm_timer_channel cc;  ///< Capture/compare channel providing the output.
 };
 
+/**
+ * @brief Accumulate a 64-bit uptime from the 32-bit TIMG12 counter.
+ *
+ * The counter runs at 4 MHz when BUSCLK is 32 MHz. Uptime is returned in timer
+ * ticks rather than seconds and is updated whenever uptime() is called.
+ */
 class msp0g_steady_clock : public lab2::steady_clock
 {
 
 public:
   /**
-   * @brief Constructor for steady clock using timg12.
+   * @brief Reset TIMG12 and start its continuous 32-bit up-counter.
    *
-   * Only one instance should exist, creating another instance will invalidate
-   * the previous.
-   *
+   * @note Use only one instance. Constructing another resets the timer used by
+   *       existing instances and disrupts their accumulated uptime.
+   *       Clock calculations assume a 32 MHz BUSCLK.
    */
   msp0g_steady_clock();
 
@@ -59,31 +61,46 @@ private:
   std::uint64_t m_uptime;
   std::uint32_t m_prev_count;
 
+  /**
+   * @brief Report the assumed TIMG12 tick frequency.
+   * @return 4,000,000 ticks per second.
+   */
   std::uint32_t driver_frequency() override;
+  /**
+   * @brief Accumulate elapsed ticks using the difference from the previous
+   * read.
+   * @return Total ticks observed since construction.
+   * @note Unsigned subtraction handles counter wraparound. Call at intervals
+   *       shorter than one 32-bit counter period to avoid losing elapsed ticks
+   *       (about 17.9 minutes at 4 MHz).
+   */
   std::uint64_t driver_uptime() override;
 };
 
+/**
+ * @brief Generate PWM with a shared timer period and a dedicated output
+ * channel.
+ *
+ * Configure the desired timer output pin through IOMUX separately. Frequency
+ * calculations assume a 32 MHz timer source divided to a 1 MHz counter clock.
+ */
 class msp0g_pwm : public lab2::pwm
 {
 
 public:
   /**
-   * @brief Constructorr for pwm
+   * @brief Initialize or share a PWM timer and reserve its selected channel.
    *
-   * @param p_config Struct containing pwm config {frequency, timer, channel}.
+   * @param p_config Requested frequency, timer, and capture/compare channel.
+   * @pre The requested frequency is between 16 and 1,000,000 Hz, inclusive.
    *
-   * Subsequent instances of this object using the same timer needs to use the
-   * same frequency and different channel (if the other channel isn't already
-   * occupied). Subsequent instances breaking this rule will not work, but will
-   * have no affect on the existing instance.
+   * @note Objects sharing a timer must have the same calculated frequency and
+   *       use different, unoccupied channels. A conflicting object is invalid:
+   *       frequency() returns zero and duty_cycle() does nothing. Successful
+   *       channel reservations remain for the rest of the program run.
    *
-   * Requested frequency (as passed in p_config) is not guaranteed due to
-   * truncation when calculating the value to load into timer. In this case,
-   * frequency will be higher than requested (lower load value = higher freq).
-   * Also frequency math assumes BUSCLK = MCLK = ULPCLK = 32MHz.
-   *
-   * Duty cycle is at 0% by default.
-   *
+   * Integer division quantizes the period, so the calculated frequency can be
+   * higher than requested. Set the desired duty cycle after construction.
    */
   msp0g_pwm(const pwm_config& p_config);
 
@@ -94,18 +111,21 @@ private:
   std::uint8_t m_channel;
   bool m_valid;
 
+  /**
+   * @brief Report the calculated PWM frequency after period quantization.
+   * @return Frequency in Hz for a valid object; zero for an invalid object.
+   */
   std::uint32_t driver_frequency() override;
 
   /**
-   * @brief Function to modify pwm duty cycle
+   * @brief Scale a normalized duty-cycle request into the channel compare
+   * value.
    *
-   * @param p_duty_cycle value from 0-65535 with 0 = 0%, 65535 = 100%, etc.
+   * @param p_duty_cycle Requested duty cycle from 0 (0%) to 65,535 (100%).
    *
-   * The requested value will get adjusted with respect to the load/max value
-   * thus precision depends on the pwm frequency. Lower pwm frequency = higher
-   * precision (load value closer to 65535)
-   *
-   *
+   * @note The compare value is quantized to the timer period. Lower PWM
+   *       frequencies provide more counter steps and finer duty resolution.
+   *       Does nothing if the object is invalid.
    */
   void driver_duty_cycle(std::uint16_t p_duty_cycle) override;
 };

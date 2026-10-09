@@ -37,40 +37,66 @@
 
 namespace msp0g {
 
+/** @brief Select GPIO port A or B. */
 enum class gpio_port : std::uint8_t
 {
   a = 0,
   b
 };
 
+/**
+ * @brief Describe a GPIO pin and its associated IOMUX register.
+ *
+ * The caller must provide a port, pin number, and PINCM number that refer to
+ * the same physical pin; the driver checks ranges but not this mapping.
+ */
 struct gpio_pin
 {
-  gpio_port port;
-  std::uint8_t pin;
-  std::uint8_t pincm;
+  gpio_port port;      ///< GPIO port containing the pin.
+  std::uint8_t pin;    ///< Port bit number: 0-31 for A or 0-27 for B.
+  std::uint8_t pincm;  ///< One-based PINCM register number, from 1 to 58.
 };
 
+/** @brief Drive and sample a GPIO output through the lab1 interface. */
 class msp0g_outpin : public lab1::output_pin
 {
 
 public:
   /**
-   * @brief Constructor for output pin.
+   * @brief Configure the pin as a GPIO output and initialize its port if
+   * needed.
    *
-   * @param p_gpio_pin GPIO pin description passed as struct
-   * @param p_settings Initial settings, default (no pu/pd, open_drain disabled)
-   * if omitted.
+   * @param p_gpio_pin Port, bit number, and associated PINCM register.
+   * @param p_settings Resistor and open-drain settings; defaults to no resistor
+   *                   and open-drain disabled.
    *
-   * If p_gpio_pin contains out of bounds values, configuration
-   * is ignored and the pin will not work.
+   * @note Resets and enables port power only for the first valid GPIO object
+   *       on that port. Invalid pins reject configuration and level access.
+   *       Call level() to set the desired output state after construction.
    */
   msp0g_outpin(const gpio_pin& p_gpio_pin, const settings& p_settings = {});
 
 private:
+  /**
+   * @brief Apply output resistor and open-drain settings.
+   * @param p_settings Electrical settings for the pin.
+   * @return True if applied; false if the pin is invalid.
+   */
   bool driver_configure(const settings& p_settings) override;
 
+  /**
+   * @brief Set or clear the pin's output latch using the GPIO set/clear
+   * registers.
+   * @param p_high True requests high; false requests low.
+   * @note Does nothing if the pin is invalid.
+   */
   void driver_level(bool p_high) override;
 
+  /**
+   * @brief Sample the pin through the GPIO input register.
+   * @return True for a high input; false for a low input or an invalid pin.
+   * @note Reads the input level rather than the stored output latch.
+   */
   bool driver_level() override;
 
   msp0g_iomux m_pincm;
@@ -79,24 +105,35 @@ private:
   bool m_valid_pin = false;
 };
 
+/** @brief Sample a GPIO input through the lab1 interface. */
 class msp0g_inpin : public lab1::input_pin
 {
 
 public:
   /**
-   * @brief Constructor for input pin.
+   * @brief Configure the pin as a GPIO input and initialize its port if needed.
    *
-   * @param p_gpio_pin GPIO pin description passed as struct
-   * @param p_settings Initial settings, default (pullup) if omitted.
+   * @param p_gpio_pin Port, bit number, and associated PINCM register.
+   * @param p_settings Initial resistor setting; defaults to a pull-up.
    *
-   * If p_gpio_pin contains out of bounds values, configuration
-   * is ignored and the pin will not work.
+   * @note Enables the input path and disables GPIO output for this pin. Port
+   *       power is initialized only once. Invalid pins reject configuration
+   *       and return false when sampled.
    */
   msp0g_inpin(const gpio_pin& p_gpio_pin, const settings& p_settings = {});
 
 private:
+  /**
+   * @brief Apply the input pin's resistor setting.
+   * @param p_settings Pull-up, pull-down, or no resistor.
+   * @return True if applied; false if the pin is invalid.
+   */
   bool driver_configure(const settings& p_settings) override;
 
+  /**
+   * @brief Sample the GPIO input register for this pin.
+   * @return True for a high input; false for a low input or an invalid pin.
+   */
   bool driver_level() override;
 
   msp0g_iomux m_pincm;

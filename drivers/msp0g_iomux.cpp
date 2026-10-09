@@ -15,8 +15,6 @@ constexpr std::uint32_t hiz1_mask = 1U << 25;
 auto* iomux_registers =
   reinterpret_cast<volatile std::uint32_t*>(iomux_base + 0x4);
 
-// iomux_registers[x] corresponds to PINCM(x+1), this helpers hides the indexing
-// issue and ensures PINCM is within boundary
 volatile std::uint32_t* pincm(std::uint8_t p_pincm)
 {
 
