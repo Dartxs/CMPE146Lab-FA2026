@@ -9,7 +9,7 @@
 
 namespace{
 
-  //PA11
+  //PB12
   msp0g::gpio_pin cs_flash_pin = {msp0g::gpio_port::b, 12, 29};
 
   //PA12
@@ -34,19 +34,22 @@ namespace{
 }
 
 /**
- * @brief Generic SPI flash memory driver
+ * @brief Access SPI flash identification, data, and erase/program operations.
  *
- * This driver works with common SPI flash memory with JEDEC ID
- * This driver needs both an SPI peripheral and an output pin for chip select.
+ * Uses JEDEC ID and standard read, page program, and 4 KB sector erase commands.
+ * The caller supplies the SPI peripheral and an active-low GPIO chip select.
+ * Both objects must remain valid for the lifetime of this driver.
  */
 class flash_memory
 {
 public:
   /**
-   * @brief Construct a new flash memory object
+   * @brief Associate the flash with an SPI peripheral and chip select.
    *
-   * @param p_spi - spi port connected to the spi flash memory
-   * @param p_chip_select - pin connected to spi flash memory chip select
+   * @param p_spi Non-null pointer to the configured SPI peripheral.
+   * @param p_chip_select Non-null pointer to the configured output pin.
+   * @pre Chip select is high before the first transaction.
+   * @note The pointers are stored without taking ownership of either object.
    */
   flash_memory(lab3::spi* p_spi, lab1::output_pin* p_chip_select)
     : m_spi(p_spi)
@@ -57,6 +60,9 @@ public:
   // TODO(lab3, step 2): Add APIs to access various parts of the flash memory as
   // required by the lab.
 
+  /**
+   * @brief Read the JEDEC ID and print its manufacturer byte in hexadecimal.
+   */
   void print_manufacturerID(){
 
     std::array<std::uint8_t, 1> tx_buffer = {jedec_id_command};
@@ -76,6 +82,11 @@ public:
 
   }
 
+  /**
+   * @brief Read the JEDEC capacity code and print the capacity in bytes.
+   *
+   * Interprets the capacity code as the exponent in 2^code bytes.
+   */
   void print_capacity(){
 
     std::array<uint8_t, 1> tx_buffer = {jedec_id_command};
@@ -98,6 +109,14 @@ public:
 
   }
 
+  /**
+   * @brief Read 32 consecutive bytes and print them as characters.
+   *
+   * @param address Starting byte address; only the lower 24 bits are sent.
+   * @pre The flash is ready to accept a read command.
+   * @note Chip select remains low across the command, address, and data.
+   *       The output is followed by a newline; non-text bytes may not display.
+   */
   void block_read(std::uint32_t address){
 
     std::array<std::uint8_t, 4> tx_buffer = 
@@ -125,10 +144,20 @@ public:
 
   }
 
-  //this API will clear 4KB at the passed address in order to
-  //perform the write
-  //upper 8 bits of the input will be truncated because address
-  //is 24 bits
+  /**
+   * @brief Read up to 32 console bytes, erase their sector, and program them.
+   *
+   * Input ends at newline, EOF, or 32 bytes. Backspace and Delete remove the
+   * previous buffered byte. Empty input leaves the flash unchanged. Otherwise,
+   * the entire containing 4 KB sector is erased before the input is programmed.
+   * The newline is not stored, and no null terminator is appended.
+   *
+   * @param address Starting byte address; only the lower 24 bits are sent.
+   * @pre The flash is ready, and the input fits within one 256-byte page.
+   * @pre CCS console I/O is active before this function reads input.
+   * @note Blocks until programming completes. Other data in the erased sector
+   *       is not preserved.
+   */
   void block_write(std::uint32_t address){
 
     std::array<std::uint8_t, 4> tx_addr_buffer = 
@@ -185,6 +214,14 @@ public:
 
   }
 
+  /**
+   * @brief Erase the 4 KB sector containing the address and wait for completion.
+   *
+   * @param address Any byte address within the sector; only the lower 24 bits
+   *                are sent. The address need not be sector-aligned.
+   * @pre The flash is ready to accept an erase command.
+   * @note Enables writes before erasing. All bytes in the sector become 0xFF.
+   */
   void sector_erase(std::uint32_t address){
 
     std::array<std::uint8_t, 4> tx_buffer = 
@@ -209,6 +246,11 @@ private:
   lab3::spi* m_spi = nullptr;
   lab1::output_pin* m_chip_select = nullptr;
 
+  /**
+   * @brief Send Write Enable and wait for the write-enable latch to be set.
+   *
+   * The command ends with chip select high before status polling begins.
+   */
   void ena_write(){
 
     m_chip_select->level(false);
@@ -221,6 +263,15 @@ private:
 
   }
 
+  /**
+   * @brief Poll Status Register 1 until the selected bits match the expectation.
+   *
+   * @param mask Status bits to inspect, such as BUSY or WEL.
+   * @param expected True waits for any masked bit to be set; false waits for
+   *                 all masked bits to be clear.
+   * @note Reads at least one status byte and keeps chip select low while
+   *       polling. There is no timeout if the expected state is never reached.
+   */
   void wait_until_ready(std::uint8_t mask, bool expected){
 
     m_chip_select->level(false);
@@ -242,8 +293,22 @@ private:
 
 };
 
+/**
+ * @brief Gate console access until the CCS debugger is ready to service I/O.
+ *
+ * Set this flag to true through CCS Expressions while execution is paused,
+ * then resume. It starts false so a standalone boot waits before console input
+ * can trigger an erase or write.
+ */
 volatile bool console_ready = false;
 
+/**
+ * @brief Demonstrate flash identification, reading, and console-driven writing.
+ *
+ * Waits for console_ready, configures the SPI pins and GPIO chip select, then
+ * prints identification and capacity, reads address zero, writes user input,
+ * and reads back the result. Remains in an infinite loop afterward.
+ */
 int main()
 {
 

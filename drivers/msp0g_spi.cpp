@@ -6,6 +6,7 @@
 
 namespace{
 
+    /** @brief Track SPI peripherals already initialized during this program run. */
     std::array<bool, 2> spi_init = {false, false};
 
     constexpr std::uintptr_t spi0_base = 0x40468000;
@@ -49,6 +50,13 @@ namespace{
     constexpr std::uint32_t tnf_mask = (0x1 << 1); //transfer FIFO not full
     constexpr std::uint32_t rfe_mask = (0x1 << 2); //receive FIFO empty
 
+    /**
+     * @brief Form a volatile pointer to a 32-bit SPI register.
+     *
+     * @param p_base Base address of the selected SPI peripheral.
+     * @param p_offset Register byte offset relative to the peripheral base.
+     * @return Pointer to the memory-mapped register at base plus offset.
+     */
     volatile std::uint32_t* reg(std::uintptr_t p_base, std::uintptr_t p_offset)
     {
 
@@ -56,6 +64,12 @@ namespace{
 
     }
 
+    /**
+     * @brief Reset and enable peripheral power before configuring SPI registers.
+     *
+     * @param p_base Base address of the selected SPI peripheral.
+     * @note Includes a delay after enabling power before returning.
+     */
     void initialize_spi(std::uintptr_t p_base){
 
         auto* pwren = reg(p_base, pwren_offset);
