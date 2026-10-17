@@ -1,29 +1,16 @@
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 
 #include "msp0g_timer.hpp"
 
 namespace {
 
-/** @brief Track the frequency and occupied channels of each shared PWM timer.
- */
-struct timer_state
-{
-
-  std::uint32_t freq;  ///< Calculated PWM frequency shared by both channels.
-  bool initiated;      ///< Whether this driver has initialized the timer.
-  std::uint8_t
-    channels;  ///< Bitmask of channels already reserved by PWM objects.
-};
-
-// index 0 corresponds to timg0, 1 = timg6, 2 = timg7, 3 = timg8
-std::array<timer_state, 4> timers;
-
 // array to store base addresses for timg0, timg6, timg7, timg8
-constexpr std::array<uint32_t, 4> timg_bases = { 0x4008'4000,
-                                                 0x4086'8000,
-                                                 0x4086'A000,
-                                                 0x4009'0000 };
+constexpr std::array<std::uintptr_t, 4> timg_bases = { 0x4008'4000,
+                                                       0x4086'8000,
+                                                       0x4086'A000,
+                                                       0x4009'0000 };
 
 constexpr std::uint32_t steady_clock_frequency = 4'000'000;
 constexpr std::uint32_t pwm_timer_frequency = 1'000'000;
@@ -64,6 +51,7 @@ constexpr std::uintptr_t cc_01_offset = 0x1810;
 constexpr std::uintptr_t ccact_01_offset = 0x1870;
 
 constexpr std::uint32_t pwren_mask = 0x2600'0001;
+constexpr std::uint32_t pwren_enable_mask = 0x1;
 constexpr std::uint32_t rstctl_mask = 0xB100'0001;
 
 // clksel
@@ -91,17 +79,33 @@ volatile std::uint32_t* reg(std::uintptr_t p_base, std::uintptr_t p_offset)
   return reinterpret_cast<volatile uint32_t*>(p_base + p_offset);
 }
 
-void initialize_timer(std::uintptr_t p_base)
+/**
+ * @brief Power and reset a timer only when it is not already powered.
+ * @param p_base Base address of the timer peripheral.
+ * @return True if this call initialized the timer; false if it was already
+ *         powered.
+ *
+ * PWM construction interprets an already-powered PWM timer as one configured
+ * by another msp0g_pwm object, as required by msp0g_pwm's ownership contract.
+ */
+bool initialize_timer(std::uintptr_t p_base)
 {
 
   auto* pwren = reg(p_base, pwren_offset);
   auto* rstctl = reg(p_base, rstctl_offset);
+
+  if ((*pwren & pwren_enable_mask) != 0U) {
+
+    return false;
+  }
 
   *rstctl = rstctl_mask;
   *pwren = pwren_mask;
 
   for (volatile int i = 0; i < 16; i++)
     ;  // required delay after setting PWREN
+
+  return true;
 }
 }  // namespace
 
@@ -155,29 +159,31 @@ msp0g_pwm::msp0g_pwm(const pwm_config& p_config)
 
   auto index = static_cast<std::uint8_t>(p_config.timer);
 
-  m_per_count = pwm_timer_frequency / p_config.freq;
+  std::uint32_t req_pwm_freq = p_config.freq;
+
+  if (req_pwm_freq > pwm_timer_frequency || req_pwm_freq < pwm_min_frequency) {
+
+    std::abort();
+  }
+
+  std::uint16_t per_count = pwm_timer_frequency / req_pwm_freq;
 
   // could be different from requested freq due to truncation
-  m_pwm_freq = pwm_timer_frequency / m_per_count;
+  std::uint32_t act_pwm_freq = pwm_timer_frequency / per_count;
   m_timer_base = timg_bases[index];
   m_channel = static_cast<std::uint8_t>(p_config.cc);
 
-  uint32_t cc_mask = (0x1 << m_channel);
+  auto* ccpd = reg(m_timer_base, ccpd_offset);
+  const uint32_t cc_mask = (0x1 << m_channel);
 
-  if (timers[index].initiated) {
-    if (m_pwm_freq != timers[index].freq ||
-        (timers[index].channels & cc_mask)) {
-      m_valid = false;
-      return;
+  if (!initialize_timer(m_timer_base)) {
+    if ((act_pwm_freq != driver_frequency()) || ((*ccpd & cc_mask) != 0U)) {
+
+      std::abort();
     }
+
   } else {
 
-    if (m_pwm_freq > pwm_timer_frequency || m_pwm_freq < pwm_min_frequency) {
-      m_valid = false;
-      return;
-    }
-
-    initialize_timer(m_timer_base);
     auto* clksel = reg(m_timer_base, clksel_offset);
     auto* cps = reg(m_timer_base, cps_offset);
     auto* ctrctl = reg(m_timer_base, ctrctl_offset);
@@ -186,46 +192,33 @@ msp0g_pwm::msp0g_pwm(const pwm_config& p_config)
     *clksel = busclk_mask;
     *cps = 31U;  // divide clock by 31+1 for 1MHz clock
 
-    *load = (m_per_count - 1);
+    *load = (per_count - 1);
 
     *ctrctl = cvae_zero | cm_up | repeat_cont | en_mask;
-
-    timers[index].initiated = true;
-    timers[index].freq = m_pwm_freq;
   }
 
-  auto* ccpd = reg(m_timer_base, ccpd_offset);
   auto* ccact_01 = reg(m_timer_base, ccact_01_offset + (m_channel * 4));
 
   *ccpd |= cc_mask;
   *ccact_01 = cuact_setlow | zact_sethigh;
-
-  timers[index].channels |= cc_mask;
-
-  m_valid = true;
 }
 
 std::uint32_t msp0g_pwm::driver_frequency()
 {
 
-  if (!m_valid) {
-    return 0;
-  }
+  auto* load = reg(m_timer_base, load_offset);
 
-  return m_pwm_freq;
+  return pwm_timer_frequency / (*load + 1);
 }
 
 void msp0g_pwm::driver_duty_cycle(std::uint16_t p_duty_cycle)
 {
 
-  if (!m_valid) {
-    return;
-  }
-
   auto* cc_01 = reg(m_timer_base, cc_01_offset + (m_channel * 4));
+  auto* load = reg(m_timer_base, load_offset);
 
   *cc_01 =
-    ((static_cast<std::uint32_t>(p_duty_cycle)) * (m_per_count - 1)) / 65535;
+    ((static_cast<std::uint32_t>(p_duty_cycle)) * (*load & 0xFFFF)) / 65535;
 }
 
 }  // namespace msp0g

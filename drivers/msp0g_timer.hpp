@@ -83,6 +83,8 @@ private:
  *
  * Configure the desired timer output pin through IOMUX separately. Frequency
  * calculations assume a 32 MHz timer source divided to a 1 MHz counter clock.
+ * Each selected timer must be owned exclusively by this PWM driver, although
+ * its two channels may be shared by compatible msp0g_pwm objects.
  */
 class msp0g_pwm : public lab2::pwm
 {
@@ -93,10 +95,13 @@ public:
    *
    * @param p_config Requested frequency, timer, and capture/compare channel.
    * @pre The requested frequency is between 16 and 1,000,000 Hz, inclusive.
+   * @pre The selected timer is either unused or was configured by another
+   *      msp0g_pwm object. No other driver may configure or use that timer.
    *
    * @note Objects sharing a timer must have the same calculated frequency and
-   *       use different, unoccupied channels. A conflicting object is invalid:
-   *       frequency() returns zero and duty_cycle() does nothing. Successful
+   *       use different, unoccupied channels. Construction aborts if the
+   *       frequency is out of range, the existing calculated frequency is
+   *       different, or the requested channel is already in use. Successful
    *       channel reservations remain for the rest of the program run.
    *
    * Integer division quantizes the period, so the calculated frequency can be
@@ -105,15 +110,13 @@ public:
   msp0g_pwm(const pwm_config& p_config);
 
 private:
-  std::uint32_t m_pwm_freq;
-  std::uint32_t m_per_count;
   std::uintptr_t m_timer_base;
   std::uint8_t m_channel;
-  bool m_valid;
 
   /**
-   * @brief Report the calculated PWM frequency after period quantization.
-   * @return Frequency in Hz for a valid object; zero for an invalid object.
+   * @brief Report the PWM frequency calculated from the timer's load value.
+   * @return Quantized frequency in Hz, assuming the configured 1 MHz timer
+   *         clock.
    */
   std::uint32_t driver_frequency() override;
 
@@ -125,7 +128,6 @@ private:
    *
    * @note The compare value is quantized to the timer period. Lower PWM
    *       frequencies provide more counter steps and finer duty resolution.
-   *       Does nothing if the object is invalid.
    */
   void driver_duty_cycle(std::uint16_t p_duty_cycle) override;
 };

@@ -28,7 +28,7 @@ struct iomux_settings
 struct iomux_config
 {
 
-  uint8_t pincm;   ///< One-based PINCM register number, from 1 to 58.
+  uint8_t pincm;   ///< One-based PINCM register number, from 1 to 60.
   uint8_t pf_sel;  ///< Peripheral function selector, from 0 to 0x3F.
   input_enable inena = input_enable::disable;  ///< Input path selection.
 };
@@ -46,9 +46,9 @@ public:
    * @param p_iomux_config PINCM number, peripheral selector, and input enable.
    * @param p_iomux_settings Pull resistor and open-drain configuration.
    *
-   * @note PINCM must be 1-58 and the selector must be at most 0x3F. Invalid
-   *       values leave the object unusable without writing the PINCM register.
-   *       The caller must check that the selected function exists on the pin.
+   * @note PINCM must be 1-60 and the selector must be at most 0x3F. An invalid
+   *       value aborts the application before writing the PINCM register. The
+   *       caller must check that the selected function exists on the pin.
    */
   msp0g_iomux(const iomux_config& p_iomux_config,
               const iomux_settings& p_iomux_settings);
@@ -59,21 +59,10 @@ public:
    * @param p_iomux_settings Resistor choice and open-drain enable state.
    * @note Enabling either pull resistor clears the other; selecting none
    *       clears both. Pin function and input enable are unchanged.
-   *       Does nothing if construction left the object invalid.
    */
   void config(const iomux_settings& p_iomux_settings);
 
-  /**
-   * @brief Report whether construction accepted the PINCM and selector ranges.
-   *
-   * @return True for an accepted configuration; false for an invalid object.
-   * @note Does not verify that the peripheral function exists on this pin.
-   */
-  bool valid_pincm();
-
 private:
   std::uint8_t m_pincm;
-  std::uint8_t m_pf_sel;
-  bool m_valid;
 };
 }  // namespace msp0g

@@ -48,13 +48,14 @@ enum class gpio_port : std::uint8_t
  * @brief Describe a GPIO pin and its associated IOMUX register.
  *
  * The caller must provide a port, pin number, and PINCM number that refer to
- * the same physical pin; the driver checks ranges but not this mapping.
+ * the same physical pin. Construction checks the individual ranges and aborts
+ * if either number is invalid, but it does not verify the physical mapping.
  */
 struct gpio_pin
 {
   gpio_port port;      ///< GPIO port containing the pin.
   std::uint8_t pin;    ///< Port bit number: 0-31 for A or 0-27 for B.
-  std::uint8_t pincm;  ///< One-based PINCM register number, from 1 to 58.
+  std::uint8_t pincm;  ///< One-based PINCM register number, from 1 to 60.
 };
 
 /** @brief Drive and sample a GPIO output through the lab1 interface. */
@@ -70,9 +71,10 @@ public:
    * @param p_settings Resistor and open-drain settings; defaults to no resistor
    *                   and open-drain disabled.
    *
-   * @note Resets and enables port power only for the first valid GPIO object
-   *       on that port. Invalid pins reject configuration and level access.
-   *       Call level() to set the desired output state after construction.
+   * @note Checks PWREN before initialization, so an already-powered port is not
+   *       reset when another GPIO object is constructed. Invalid pin or PINCM
+   *       values abort the application. Call level() to set the desired output
+   *       state after construction.
    */
   msp0g_outpin(const gpio_pin& p_gpio_pin, const settings& p_settings = {});
 
@@ -80,7 +82,8 @@ private:
   /**
    * @brief Apply output resistor and open-drain settings.
    * @param p_settings Electrical settings for the pin.
-   * @return True if applied; false if the pin is invalid.
+   * @return Always true because invalid pins abort during construction and all
+   *         output settings are supported.
    */
   bool driver_configure(const settings& p_settings) override;
 
@@ -88,13 +91,12 @@ private:
    * @brief Set or clear the pin's output latch using the GPIO set/clear
    * registers.
    * @param p_high True requests high; false requests low.
-   * @note Does nothing if the pin is invalid.
    */
   void driver_level(bool p_high) override;
 
   /**
    * @brief Sample the pin through the GPIO input register.
-   * @return True for a high input; false for a low input or an invalid pin.
+   * @return True for a high input; false for a low input.
    * @note Reads the input level rather than the stored output latch.
    */
   bool driver_level() override;
@@ -102,7 +104,6 @@ private:
   msp0g_iomux m_pincm;
   std::uint32_t m_pin_mask = 0U;
   gpio_port m_port;
-  bool m_valid_pin = false;
 };
 
 /** @brief Sample a GPIO input through the lab1 interface. */
@@ -116,9 +117,9 @@ public:
    * @param p_gpio_pin Port, bit number, and associated PINCM register.
    * @param p_settings Initial resistor setting; defaults to a pull-up.
    *
-   * @note Enables the input path and disables GPIO output for this pin. Port
-   *       power is initialized only once. Invalid pins reject configuration
-   *       and return false when sampled.
+   * @note Enables the input path and disables GPIO output for this pin. PWREN
+   *       is checked before initialization, so an already-powered port is not
+   *       reset. Invalid pin or PINCM values abort the application.
    */
   msp0g_inpin(const gpio_pin& p_gpio_pin, const settings& p_settings = {});
 
@@ -126,20 +127,20 @@ private:
   /**
    * @brief Apply the input pin's resistor setting.
    * @param p_settings Pull-up, pull-down, or no resistor.
-   * @return True if applied; false if the pin is invalid.
+   * @return Always true because invalid pins abort during construction and all
+   *         input resistor settings are supported.
    */
   bool driver_configure(const settings& p_settings) override;
 
   /**
    * @brief Sample the GPIO input register for this pin.
-   * @return True for a high input; false for a low input or an invalid pin.
+   * @return True for a high input; false for a low input.
    */
   bool driver_level() override;
 
   msp0g_iomux m_pincm;
   std::uint32_t m_pin_mask = 0U;
   gpio_port m_port;
-  bool m_valid_pin = false;
 };
 
 }  // namespace msp0g

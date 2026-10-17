@@ -1,5 +1,5 @@
-#include <array>
 #include <cstdint>
+#include <cstdlib>
 
 #include "msp0g_gpio.hpp"
 
@@ -16,15 +16,18 @@ constexpr std::uintptr_t doeset_offset = 0x12D0;   // doeset31_0
 constexpr std::uintptr_t doeclr_offset = 0x12E0;   // doeclr31_0
 constexpr std::uintptr_t din_offset = 0x1380;      // din31_0
 
-constexpr std::uint32_t pwren_mask = 0x2600'0001;
+constexpr std::uint32_t pwren_mask = 0x2600'0001;  // unlock key and enable bit
+constexpr std::uint32_t pwren_enable_mask = 0x1;   // readable enable bit only
 constexpr std::uint32_t rstctl_mask = 0xB100'0001;
 
 constexpr std::uint8_t pf_gpio = 0x01;
 
-/** @brief Track port initialization to avoid resetting an already active port.
+/**
+ * @brief Form a volatile pointer to a GPIO register.
+ * @param p_port GPIO port containing the register.
+ * @param p_offset Register byte offset from the selected port's base address.
+ * @return Pointer to the selected 32-bit memory-mapped register.
  */
-std::array<bool, 2> gpio_init = { false, false };
-
 volatile std::uint32_t* gpio_reg(msp0g::gpio_port p_port,
                                  std::uintptr_t p_offset)
 {
@@ -43,6 +46,12 @@ volatile std::uint32_t* gpio_reg(msp0g::gpio_port p_port,
   return reinterpret_cast<volatile std::uint32_t*>(base + p_offset);
 }
 
+/**
+ * @brief Check whether a pin number is available on the selected GPIO port.
+ * @param p_port GPIO port A or B.
+ * @param p_pin Port-relative pin number to check.
+ * @return True for PA0-PA31 or PB0-PB27; false otherwise.
+ */
 bool valid_pin(msp0g::gpio_port p_port, std::uint8_t p_pin)
 {
 
@@ -53,11 +62,24 @@ bool valid_pin(msp0g::gpio_port p_port, std::uint8_t p_pin)
   return (p_pin <= 27);
 }
 
+/**
+ * @brief Power and reset a GPIO port only when it is not already powered.
+ *
+ * Reading PWREN avoids a software initialization flag and prevents a later
+ * GPIO object from resetting configuration already applied to the same port.
+ *
+ * @param p_port GPIO port to initialize.
+ */
 void initialize_gpio_port(msp0g::gpio_port p_port)
 {
 
   auto* rstctl = gpio_reg(p_port, rstctl_offset);
   auto* pwren = gpio_reg(p_port, pwren_offset);
+
+  if ((*pwren & pwren_enable_mask) != 0U) {
+
+    return;
+  }
 
   *rstctl = rstctl_mask;
   *pwren = pwren_mask;
@@ -77,46 +99,33 @@ msp0g_outpin::msp0g_outpin(const gpio_pin& p_gpio_pin,
   , m_port(p_gpio_pin.port)
 {
 
-  m_valid_pin = valid_pin(m_port, p_gpio_pin.pin) && m_pincm.valid_pincm();
+  bool valid = valid_pin(m_port, p_gpio_pin.pin);
 
-  if (m_valid_pin) {
-
-    if (!gpio_init[static_cast<uint8_t>(m_port)]) {
-
-      initialize_gpio_port(m_port);
-
-      gpio_init[static_cast<uint8_t>(m_port)] = true;
-    }
-
-    m_pin_mask = 1U << p_gpio_pin.pin;
-
-    configure(p_settings);
-
-    auto* doeset = gpio_reg(m_port, doeset_offset);
-
-    *doeset = m_pin_mask;
+  if (!valid) {
+    std::abort();
   }
+
+  initialize_gpio_port(m_port);
+
+  m_pin_mask = 1U << p_gpio_pin.pin;
+
+  configure(p_settings);
+
+  auto* doeset = gpio_reg(m_port, doeset_offset);
+
+  *doeset = m_pin_mask;
 }
 
 bool msp0g_outpin::driver_configure(const settings& p_settings)
 {
 
-  if (!m_valid_pin) {
-    return false;
-  }
-
   m_pincm.config({ p_settings.resistor, p_settings.open_drain });
 
-  return true;
+  return true;  // all settings are supported for a constructed output pin
 }
 
 void msp0g_outpin::driver_level(bool p_high)
 {
-
-  if (!m_valid_pin) {
-
-    return;
-  }
 
   if (p_high) {
 
@@ -135,11 +144,6 @@ void msp0g_outpin::driver_level(bool p_high)
 bool msp0g_outpin::driver_level()
 {
 
-  if (!m_valid_pin) {
-
-    return false;
-  }
-
   auto* din = gpio_reg(m_port, din_offset);
 
   return (*din & m_pin_mask);
@@ -151,46 +155,33 @@ msp0g_inpin::msp0g_inpin(const gpio_pin& p_gpio_pin, const settings& p_settings)
   , m_port(p_gpio_pin.port)
 {
 
-  m_valid_pin = valid_pin(m_port, p_gpio_pin.pin) && m_pincm.valid_pincm();
+  bool valid = valid_pin(m_port, p_gpio_pin.pin);
 
-  if (m_valid_pin) {
-
-    if (!gpio_init[static_cast<uint8_t>(m_port)]) {
-
-      initialize_gpio_port(m_port);
-
-      gpio_init[static_cast<uint8_t>(m_port)] = true;
-    }
-
-    m_pin_mask = 1U << p_gpio_pin.pin;
-
-    configure(p_settings);
-
-    auto* doeclr = gpio_reg(m_port, doeclr_offset);
-
-    *doeclr = m_pin_mask;
+  if (!valid) {
+    std::abort();
   }
+
+  initialize_gpio_port(m_port);
+
+  m_pin_mask = 1U << p_gpio_pin.pin;
+
+  configure(p_settings);
+
+  auto* doeclr = gpio_reg(m_port, doeclr_offset);
+
+  *doeclr = m_pin_mask;
 }
 
 bool msp0g_inpin::driver_configure(const settings& p_settings)
 {
 
-  if (!m_valid_pin) {
-    return false;
-  }
-
   m_pincm.config({ p_settings.resistor });
 
-  return true;
+  return true;  // all settings are supported for a constructed input pin
 }
 
 bool msp0g_inpin::driver_level()
 {
-
-  if (!m_valid_pin) {
-
-    return false;
-  }
 
   auto* din = gpio_reg(m_port, din_offset);
 

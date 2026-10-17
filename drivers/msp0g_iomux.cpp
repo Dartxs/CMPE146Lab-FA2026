@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstdlib>
 
 #include "msp0g_iomux.hpp"
 
@@ -15,6 +16,12 @@ constexpr std::uint32_t hiz1_mask = 1U << 25;
 auto* iomux_registers =
   reinterpret_cast<volatile std::uint32_t*>(iomux_base + 0x4);
 
+/**
+ * @brief Locate a PINCM register by its one-based register number.
+ * @param p_pincm PINCM register number, from 1 to 60.
+ * @return Pointer to the selected register, or nullptr if the number is out of
+ *         range.
+ */
 volatile std::uint32_t* pincm(std::uint8_t p_pincm)
 {
 
@@ -34,35 +41,27 @@ msp0g_iomux::msp0g_iomux(const iomux_config& p_iomux_config,
 {
 
   m_pincm = p_iomux_config.pincm;
-  m_pf_sel = p_iomux_config.pf_sel;
-
-  if (m_pincm <= 0 || m_pincm > 58 || m_pf_sel > 0x3F) {
-
-    m_valid = false;
-    return;
-  }
+  std::uint8_t pf_sel = p_iomux_config.pf_sel;
 
   auto* pincm_reg = pincm(m_pincm);
 
-  *pincm_reg = m_pf_sel | pc_mask;
+  if (pincm_reg == nullptr || pf_sel > 0x3F) {
+
+    std::abort();
+  }
+
+  *pincm_reg = pf_sel | pc_mask;
 
   if (static_cast<bool>(p_iomux_config.inena)) {
 
     *pincm_reg |= inena_mask;
   }
 
-  m_valid = true;
-
   config(p_iomux_settings);
 }
 
 void msp0g_iomux::config(const iomux_settings& p_iomux_settings)
 {
-
-  if (!m_valid) {
-
-    return;
-  }
 
   auto* pincm_reg = pincm(m_pincm);
 
@@ -89,12 +88,6 @@ void msp0g_iomux::config(const iomux_settings& p_iomux_settings)
 
     *pincm_reg &= ~hiz1_mask;
   }
-}
-
-bool msp0g_iomux::valid_pincm()
-{
-
-  return m_valid;
 }
 
 }  // namespace msp0g
