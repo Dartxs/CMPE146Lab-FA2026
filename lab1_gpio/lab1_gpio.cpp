@@ -13,8 +13,8 @@ constexpr msp0g::gpio_pin green_led_pin{ msp0g::gpio_port::b, 27, 58 };
 int main()
 {
 
-  msp0g::initialize_gpio_port(msp0g::gpio_port::a);
-  msp0g::initialize_gpio_port(msp0g::gpio_port::b);
+  // msp0g::initialize_gpio_port(msp0g::gpio_port::a);
+  // msp0g::initialize_gpio_port(msp0g::gpio_port::b);
 
   lab1::input_pin::settings sw1_settings{ lab1::pin_resistor::none };
 
