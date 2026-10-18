@@ -29,26 +29,25 @@ public:
    *
    * @param p_settings Initial clock rate and SPI bus mode.
    * @param p_spix Peripheral to initialize: SPI0 or SPI1.
-   * @note If the peripheral was already initialized by this driver, or
-   *       the requested clock is below 15,625 Hz, this object is invalid:
-   *       configuration returns false and transfers do nothing.
-   *       Successful initialization reserves the peripheral for the rest
-   *       of the program run.
+   * @note Calls std::abort() if the requested clock is below 15,625 Hz or
+   *       the selected peripheral is already powered. Successful construction
+   *       gives this object exclusive use of the peripheral.
    */
   msp0g_spi(const settings& p_settings, spix p_spix);
 
 private:
   std::uintptr_t m_spi_base;
-  bool m_valid;
 
   /**
-   * @brief Apply the SPI bus mode and calculate the serial clock divider.
+   * @brief Wait until idle, then apply the SPI bus mode and clock divider.
    *
    * @param p_settings Requested clock rate and SPI bus mode.
-   * @return True if applied; false if the object is invalid or the
-   *         requested clock is below 15,625 Hz.
+   * @return True if the settings were applied; false if the requested clock
+   *         is below 15,625 Hz.
    * @note Rates above 16 MHz are clamped to 16 MHz. Other accepted rates
    *       are rounded down to a realizable rate, assuming 32 MHz SYSCLK.
+   *       SPI is disabled while its configuration registers are updated and
+   *       re-enabled before this function returns. Idle polling has no timeout.
    */
   bool driver_configure(const settings& p_settings) override;
   /**
@@ -61,7 +60,7 @@ private:
    * @note Transfers the larger span size, saving received bytes only
    *       while the incoming span has room. Every transmitted byte's RX
    *       entry is read, even when discarded. Chip select is not changed.
-   *       Invalid objects return immediately; FIFO polling has no timeout.
+   *       FIFO and idle polling have no timeout.
    */
   void driver_transfer(std::span<const std::uint8_t> p_data_out,
                        std::span<std::uint8_t> p_data_in,

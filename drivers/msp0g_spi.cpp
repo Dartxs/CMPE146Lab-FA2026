@@ -1,13 +1,9 @@
-#include <array>
-#include <cmath>
 #include <cstdint>
+#include <cstdlib>
 
 #include "msp0g_spi.hpp"
 
 namespace {
-
-/** @brief Track SPI peripherals already initialized during this program run. */
-std::array<bool, 2> spi_init = { false, false };
 
 constexpr std::uintptr_t spi0_base = 0x40468000;
 constexpr std::uintptr_t spi1_base = 0x4046A000;
@@ -15,8 +11,7 @@ constexpr std::uintptr_t spi1_base = 0x4046A000;
 constexpr std::uintptr_t pwren_offset = 0x800;
 constexpr std::uintptr_t rstctl_offset = 0x804;
 
-// constexpr std::uint32_t clkdiv_offset = 0x1000;
-constexpr std::uint32_t clksel_offset = 0x1004;
+constexpr std::uintptr_t clksel_offset = 0x1004;
 constexpr std::uintptr_t ctl0_offset = 0x1100;
 constexpr std::uintptr_t ctl1_offset = 0x1104;
 constexpr std::uintptr_t clkctl_offset = 0x1108;
@@ -27,6 +22,7 @@ constexpr std::uintptr_t rxdata_offset = 0x1130;
 constexpr std::uintptr_t txdata_offset = 0x1140;
 
 constexpr std::uint32_t pwren_mask = 0x2600'0001;
+constexpr std::uint32_t pwren_enable_mask = 0x1;
 constexpr std::uint32_t rstctl_mask = 0xB100'0001;
 
 // clksel
@@ -50,23 +46,39 @@ constexpr std::uint32_t busy_mask = (0x1 << 4);
 constexpr std::uint32_t tnf_mask = (0x1 << 1);  // transfer FIFO not full
 constexpr std::uint32_t rfe_mask = (0x1 << 2);  // receive FIFO empty
 
+constexpr std::uint32_t sclk_freq = 32'000'000;
+
 volatile std::uint32_t* reg(std::uintptr_t p_base, std::uintptr_t p_offset)
 {
 
   return reinterpret_cast<volatile uint32_t*>(p_base + p_offset);
 }
 
-void initialize_spi(std::uintptr_t p_base)
+/**
+ * @brief Claim, reset, and power an SPI peripheral.
+ *
+ * @param p_base Base address of the selected SPI peripheral.
+ * @return True after initialization; false if the peripheral is already
+ *         powered and therefore unavailable to this driver instance.
+ */
+bool initialize_spi(std::uintptr_t p_base)
 {
 
   auto* pwren = reg(p_base, pwren_offset);
   auto* rstctl = reg(p_base, rstctl_offset);
+
+  if ((*pwren & pwren_enable_mask) != 0) {
+
+    return false;
+  }
 
   *rstctl = rstctl_mask;
   *pwren = pwren_mask;
 
   for (volatile int i = 0; i < 16; i++)
     ;
+
+  return true;
 }
 
 }  // namespace
@@ -76,10 +88,8 @@ namespace msp0g {
 msp0g_spi::msp0g_spi(const settings& p_settings, spix p_spix)
 {
 
-  if (spi_init[static_cast<uint8_t>(p_spix)] ||
-      (p_settings.clock_rate < 15625)) {
-    m_valid = false;
-    return;
+  if (p_settings.clock_rate < 15625) {
+    std::abort();
   }
 
   if (p_spix == spix::spi0) {
@@ -88,7 +98,10 @@ msp0g_spi::msp0g_spi(const settings& p_settings, spix p_spix)
     m_spi_base = spi1_base;
   }
 
-  initialize_spi(m_spi_base);
+  if (!initialize_spi(m_spi_base)) {
+
+    std::abort();
+  }
 
   auto* clksel = reg(m_spi_base, clksel_offset);
   auto* ctl0 = reg(m_spi_base, ctl0_offset);
@@ -98,24 +111,25 @@ msp0g_spi::msp0g_spi(const settings& p_settings, spix p_spix)
   *ctl0 = data_size_8_mask;
   *ctl1 = msb_mask | CP_mask;
 
-  m_valid = true;
   driver_configure(p_settings);
-
-  *ctl1 |= ena_mask;
-
-  spi_init[static_cast<uint8_t>(p_spix)] = true;
 }
 
 bool msp0g_spi::driver_configure(const settings& p_settings)
 {
 
-  if (!m_valid || (p_settings.clock_rate < 15625)) {
+  if (p_settings.clock_rate < 15625) {
     return false;
   }
 
+  auto* stat = reg(m_spi_base, stat_offset);
   auto* ctl0 = reg(m_spi_base, ctl0_offset);
+  auto* ctl1 = reg(m_spi_base, ctl1_offset);
   auto* clkctl = reg(m_spi_base, clkctl_offset);
 
+  while ((*stat & busy_mask) != 0)
+    ;  // Wait until SPI is idle before disabling it.
+
+  *ctl1 &= ~ena_mask;
   *ctl0 &= ~modes_mask;
   *ctl0 |= modes[static_cast<uint8_t>(p_settings.bus_mode)];
 
@@ -123,37 +137,38 @@ bool msp0g_spi::driver_configure(const settings& p_settings)
   SCR calculation:
 
   clkrate = sclk/((SCR+1)*2)
+  clkrate = (sclk/2)/(SCR+1)
+  SCR+1 = (sclk/2)/clkrate
+  SCR = ((sclk/2)/clkrate) - 1
   min clkrate = SCR = 1023 => 15.625 kHz
   max clkrate = SCR = 0 => 16 MHz
   */
+
   uint32_t clkrate = p_settings.clock_rate;
-  std::uint32_t SCR;
+  std::uint32_t scr;
 
   if (clkrate > 16'000'000) {
 
-    SCR = 0;
+    scr = 0;
 
   } else {
 
-    // ceil needed to ensure act clkrate <= req clkrate (higher SCR = lower
-    // clkrate)
-
-    SCR = static_cast<std::uint32_t>(
-      std::ceil((32'000'000.0 / (static_cast<double>(clkrate) * 2.0)) - 1.0));
+    // ceil without cmath: ceil(a/b) = (a+b-1)/b
+    // needed to ensure act clkrate <= req clkrate
+    // (higher SCR = lower clkrate)
+    scr = (((sclk_freq / 2) + clkrate - 1) / clkrate) - 1;
   }
 
-  *clkctl = SCR;
+  *clkctl = scr;
+  *ctl1 |= ena_mask;
 
   return true;
 }
+
 void msp0g_spi::driver_transfer(std::span<const std::uint8_t> p_data_out,
                                 std::span<std::uint8_t> p_data_in,
                                 std::uint8_t p_filler)
 {
-
-  if (!m_valid) {
-    return;
-  }
 
   std::size_t loop_size = (p_data_out.size() > p_data_in.size())
                             ? p_data_out.size()
