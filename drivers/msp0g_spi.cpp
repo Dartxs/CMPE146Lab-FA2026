@@ -88,14 +88,11 @@ namespace msp0g {
 
 msp0g_spi::msp0g_spi(const settings& p_settings, spix p_spix)
 {
-
-  if (p_settings.clock_rate < 15625) {
-    std::abort();
-  }
-
+  
   m_spi_base = spi_base[static_cast<std::uint8_t>(p_spix)];
 
-  if (!initialize_spi(m_spi_base)) {
+  if ((p_settings.clock_rate < 15625) || 
+      !initialize_spi(m_spi_base)) {
 
     std::abort();
   }
