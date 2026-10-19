@@ -65,6 +65,8 @@ private:
   void driver_transfer(std::span<const std::uint8_t> p_data_out,
                        std::span<std::uint8_t> p_data_in,
                        std::uint8_t p_filler) override;
+                       
+  void apply_config(const settings& p_settings);
 };
 
 }  // namespace msp0g

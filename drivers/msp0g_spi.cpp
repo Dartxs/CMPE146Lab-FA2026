@@ -39,7 +39,7 @@ constexpr std::uint32_t data_size_8_mask = (0x7);
 
 // ctl1
 constexpr std::uint32_t msb_mask = (0x1 << 4);
-constexpr std::uint32_t CP_mask = (0x1 << 2);
+constexpr std::uint32_t cp_mask = (0x1 << 2);
 constexpr std::uint32_t ena_mask = 0x1;
 
 // stat
@@ -103,9 +103,9 @@ msp0g_spi::msp0g_spi(const settings& p_settings, spix p_spix)
 
   *clksel = sysclk_mask;
   *ctl0 = data_size_8_mask;
-  *ctl1 = msb_mask | CP_mask;
+  *ctl1 = msb_mask | cp_mask;
 
-  driver_configure(p_settings);
+  apply_config(p_settings);
 }
 
 bool msp0g_spi::driver_configure(const settings& p_settings)
@@ -115,46 +115,7 @@ bool msp0g_spi::driver_configure(const settings& p_settings)
     return false;
   }
 
-  auto* stat = reg(m_spi_base, stat_offset);
-  auto* ctl0 = reg(m_spi_base, ctl0_offset);
-  auto* ctl1 = reg(m_spi_base, ctl1_offset);
-  auto* clkctl = reg(m_spi_base, clkctl_offset);
-
-  while ((*stat & busy_mask) != 0)
-    ;  // Wait until SPI is idle before disabling it.
-
-  *ctl1 &= ~ena_mask;
-  *ctl0 &= ~modes_mask;
-  *ctl0 |= modes[static_cast<uint8_t>(p_settings.bus_mode)];
-
-  /*
-  SCR calculation:
-
-  clkrate = sclk/((SCR+1)*2)
-  clkrate = (sclk/2)/(SCR+1)
-  SCR+1 = (sclk/2)/clkrate
-  SCR = ((sclk/2)/clkrate) - 1
-  min clkrate = SCR = 1023 => 15.625 kHz
-  max clkrate = SCR = 0 => 16 MHz
-  */
-
-  uint32_t clkrate = p_settings.clock_rate;
-  std::uint32_t scr;
-
-  if (clkrate > 16'000'000) {
-
-    scr = 0;
-
-  } else {
-
-    // ceil without cmath: ceil(a/b) = (a+b-1)/b
-    // needed to ensure act clkrate <= req clkrate
-    // (higher SCR = lower clkrate)
-    scr = (((sclk_freq / 2) + clkrate - 1) / clkrate) - 1;
-  }
-
-  *clkctl = scr;
-  *ctl1 |= ena_mask;
+  apply_config(p_settings);
 
   return true;
 }
@@ -201,6 +162,52 @@ void msp0g_spi::driver_transfer(std::span<const std::uint8_t> p_data_out,
 
   while (*stat & busy_mask)
     ;
+}
+
+void msp0g_spi::apply_config(const settings& p_settings)
+{
+
+  auto* stat = reg(m_spi_base, stat_offset);
+  auto* ctl0 = reg(m_spi_base, ctl0_offset);
+  auto* ctl1 = reg(m_spi_base, ctl1_offset);
+  auto* clkctl = reg(m_spi_base, clkctl_offset);
+
+  while ((*stat & busy_mask) != 0)
+    ;  // Wait until SPI is idle before disabling it.
+
+  *ctl1 &= ~ena_mask;
+  *ctl0 &= ~modes_mask;
+  *ctl0 |= modes[static_cast<uint8_t>(p_settings.bus_mode)];
+
+  /*
+  SCR calculation:
+
+  clkrate = sclk/((SCR+1)*2)
+  clkrate = (sclk/2)/(SCR+1)
+  SCR+1 = (sclk/2)/clkrate
+  SCR = ((sclk/2)/clkrate) - 1
+  min clkrate = SCR = 1023 => 15.625 kHz
+  max clkrate = SCR = 0 => 16 MHz
+  */
+
+  uint32_t clkrate = p_settings.clock_rate;
+  std::uint32_t scr;
+
+  if (clkrate > 16'000'000) {
+
+    scr = 0;
+
+  } else {
+
+    // ceil without cmath: ceil(a/b) = (a+b-1)/b
+    // needed to ensure act clkrate <= req clkrate
+    // (higher SCR = lower clkrate)
+    scr = (((sclk_freq / 2) + clkrate - 1) / clkrate) - 1;
+  }
+
+  *clkctl = scr;
+  *ctl1 |= ena_mask;
+
 }
 
 }  // namespace msp0g
