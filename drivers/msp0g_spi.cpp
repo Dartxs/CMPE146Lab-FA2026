@@ -1,12 +1,13 @@
 #include <cstdint>
 #include <cstdlib>
+#include <array>
 
 #include "msp0g_spi.hpp"
 
 namespace {
 
-constexpr std::uintptr_t spi0_base = 0x40468000;
-constexpr std::uintptr_t spi1_base = 0x4046A000;
+constexpr std::array<std::uintptr_t, 2> spi_base = {0x40468000,
+                                                    0x4046A000};
 
 constexpr std::uintptr_t pwren_offset = 0x800;
 constexpr std::uintptr_t rstctl_offset = 0x804;
@@ -30,10 +31,10 @@ constexpr std::uint32_t sysclk_mask = (0x1 << 3);
 
 // ctl0
 constexpr std::uint32_t modes_mask = (0b11 << 8);
-constexpr std::uint32_t modes[4] = { (0b00 << 8),
-                                     (0b10 << 8),
-                                     (0b01 << 8),
-                                     (0b11 << 8) };
+constexpr std::array<std::uint32_t, 4> modes = {(0b00 << 8),
+                                                (0b10 << 8),
+                                                (0b01 << 8),
+                                                (0b11 << 8)};
 constexpr std::uint32_t data_size_8_mask = (0x7);
 
 // ctl1
@@ -92,11 +93,7 @@ msp0g_spi::msp0g_spi(const settings& p_settings, spix p_spix)
     std::abort();
   }
 
-  if (p_spix == spix::spi0) {
-    m_spi_base = spi0_base;
-  } else {
-    m_spi_base = spi1_base;
-  }
+  m_spi_base = spi_base[static_cast<uint8_t>(p_spix)];
 
   if (!initialize_spi(m_spi_base)) {
 
