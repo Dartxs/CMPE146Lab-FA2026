@@ -71,19 +71,6 @@
         "offsetof",
         "uintptr",
         "CPHA",
-        "GPIOA",
-        "GPIOB",
-        "DOUTCLR",
-        "DOESET",
-        "DOECLR",
-        "PIPD",
-        "PIPU",
-        "INENA",
-        "PWREN",
-        "RSTCTL",
-        "pwren",
-        "rstctl",
-        "outpin",
-        "inpin"
+        "BUSCLK",
     ]
 }
