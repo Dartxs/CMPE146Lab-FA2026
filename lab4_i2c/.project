@@ -18,4 +18,11 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.core.ccnature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>drivers</name>
+			<type>2</type>
+			<location>C:/Users/kobyt/workspace_ccstheia/CMPE146Lab-FA2026/drivers</location>
+		</link>
+	</linkedResources>
 </projectDescription>
