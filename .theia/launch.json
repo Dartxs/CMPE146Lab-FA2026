@@ -17,7 +17,20 @@
             "projectInfo": {
                 "name": "lab4_i2c",
                 "resourceId": "/lab4_i2c"
-            }
+            },
+            "connections": [
+                {
+                    "name": "Texas Instruments XDS110 USB Debug Probe",
+                    "cores": [
+                        {
+                            "name": "CORTEX_M0P",
+                            "debuggerSettings": {
+                                "data": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>\n<PropertyValues/>\n"
+                            }
+                        }
+                    ]
+                }
+            ]
         },
         {
             "name": "lab5_adc_dac",
