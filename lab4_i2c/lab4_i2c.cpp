@@ -73,22 +73,25 @@ public:
       std::printf("could not set accelerometer\n");
       std::abort();
 
-    } else {
+    } 
 
-      lab2::delay(m_clock, 5ms);
+    lab2::delay(m_clock, 5ms);
 
-      std::uint8_t pmu_status;
-      if (!read_reg(pmu_status_address, pmu_status)) {
+    std::uint8_t pmu_status;
 
-        std::printf("could not read pmu status\n");
-        std::abort();
+    if (!read_reg(pmu_status_address, pmu_status)) {
 
-      } else if ((pmu_status & 0x30) != 0x10) {
+      std::printf("could not read pmu status\n");
+      std::abort();
 
-        std::printf("Accelerometer not in proper power mode\n");
-        std::abort();
-      }
+    } 
+    
+    if ((pmu_status & 0x30) != 0x10) {
+
+      std::printf("Accelerometer not in proper power mode\n");
+      std::abort();
     }
+
   }
 
 private:
