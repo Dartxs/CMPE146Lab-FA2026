@@ -21,7 +21,7 @@
 		<link>
 			<name>drivers</name>
 			<type>2</type>
-			<location>C:/Users/kobyt/workspace_ccstheia/CMPE146Lab-FA2026/drivers</location>
+			<locationURI>PARENT-1-PROJECT_LOC/drivers</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
