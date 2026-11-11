@@ -67,6 +67,15 @@
                 "name": "lab2_interrupt_timer_pwm",
                 "resourceId": "/lab2_interrupt_timer_pwm"
             }
+        },
+        {
+            "name": "Test_cpp",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "Test_cpp",
+                "resourceId": "/Test_cpp"
+            }
         }
     ]
 }

@@ -61,7 +61,7 @@ constexpr std::uint32_t receive_timeout_interrupt_mask = 0x1;
 constexpr std::uint32_t receive_interrupt_mask = (0x1 << 10);
 
 constexpr std::uint32_t receive_fifo_level_mask = (0b111 << 4);
-constexpr std::uint32_t receive_fifo_quarter_full = 0;
+constexpr std::uint32_t receive_fifo_quarter_full = (0x1 << 4);
 constexpr std::uint32_t receive_timeout_select_mask = (0xF << 8);
 constexpr std::uint32_t receive_timeout_four_bits = (0x4 << 8);
 
