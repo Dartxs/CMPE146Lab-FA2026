@@ -9,6 +9,7 @@
 #include "semphr.h"
 #include "task.h"
 
+
 #include <ti/driverlib/driverlib.h>
 
 #include "../hal/adc.hpp"
@@ -16,7 +17,7 @@
 #include "../hal/gpio.hpp"
 #include "../hal/serial.hpp"
 #include "../hal/timer.hpp"
-
+#include "msp0g_uart.hpp"
 // =============================================================================
 // Role 1: ADC
 // =============================================================================
@@ -45,31 +46,19 @@ extern "C" void ADC0_IRQHandler()
 // Role 2: UART
 // =============================================================================
 
-// TODO(lab, role 2): Make this class inherit from and implement the
-// `lab6::serial` interface (`serial.hpp`), written register-level - no
-// DriverLib. The constructor receives the clock and the serial settings and
-// applies them immediately, including the baud dividers and the RX interrupt.
-// Implement driver_configure() because the interface requires it, and call it
-// from the constructor. Reception fills a circular buffer from the UART's RX
-// interrupt; driver_receive_cursor() returns where the next byte will be
-// written. Make the buffer larger than one packet (256 bytes is safe).
-//
-// Add the matching `extern "C" void UARTn_IRQHandler()` for the UART instance
-// you pick (UART0 through UART3).
-class serial_driver
-{};
+// Role 2 lives in msp0g_uart.hpp / msp0g_uart.cpp. The constructor receives
+// the serial settings and the UART instance, applies the baud dividers, and
+// enables the RX interrupt. driver_configure() remains because lab6::serial
+// requires it, and the constructor applies the initial settings itself.
+using serial_driver = msp0g::msp0g_uart;
 
 // =============================================================================
 // Role 3: CRC
 // =============================================================================
 
-// TODO(lab, role 3): Make this class inherit from and implement the
-// `lab6::crc32` interface (`crc.hpp`), written register-level against the
-// on-chip CRC accelerator - no DriverLib. Its output must match
-// crc32_software below for the same input. Check the accelerator's bit-order
-// options and whether it applies the final XOR.
-class crc32_hardware
-{};
+// Role 3's hardware driver is lab6::crc32_hardware in ../hal/crc.hpp, with
+// the register implementation in crc.cpp. It is the benchmark. Packet
+// creation and validation use crc32_software.
 
 // Supplied reference implementation - do not modify. This is the standard
 // reflected CRC-32 (IEEE 802.3 / zlib) algorithm, computed bit-by-bit in
@@ -136,11 +125,14 @@ constexpr std::size_t packet_size =
 // request_task -> sampler_task: "take a batch now". Carries no data.
 // TODO(lab, role 4): Create with xSemaphoreCreateBinaryStatic().
 SemaphoreHandle_t sample_request = nullptr;
+StaticSemaphore_t sample_request_storage;
 
 // sampler_task -> transmit_task: a copy of one temperature_batch.
 // TODO(lab, role 4): Create with xQueueCreateStatic(), depth 1, item size
 // sizeof(temperature_batch).
 QueueHandle_t batch_queue = nullptr;
+StaticQueue_t batch_queue_storage;
+std::uint8_t batch_queue_buffer[sizeof(temperature_batch)];
 
 // =============================================================================
 // Sensor board: tasks
@@ -150,10 +142,32 @@ QueueHandle_t batch_queue = nullptr;
 // receive_cursor() with the last position you read. When
 // sample_request_command arrives, xSemaphoreGive(sample_request). This task
 // only reads from the serial driver.
-void request_task(void*)
+void request_task(void* p_context)
 {
-  while (true) {
-  }
+    auto* uart = static_cast<lab6::serial*>(p_context);
+
+    auto buffer = uart->receive_buffer();
+
+    std::size_t read_cursor = 0;
+
+    while (true) {
+
+        std::size_t write_cursor = uart->receive_cursor();
+
+        while (read_cursor != write_cursor) {
+
+            std::uint8_t received_byte = buffer[read_cursor];
+
+            if (received_byte == sample_request_command) {
+                xSemaphoreGive(sample_request);
+            }
+
+            read_cursor = (read_cursor + 1) % buffer.size();
+        }
+
+        constexpr TickType_t delay_ticks = pdMS_TO_TICKS(5);
+        vTaskDelay(delay_ticks > 0 ? delay_ticks : 1);
+    }
 }
 
 // TODO(lab, role 1): Construct an adc_driver. Loop forever:
@@ -165,25 +179,79 @@ void request_task(void*)
 //   4. xQueueSend(batch_queue, &batch, portMAX_DELAY)
 void sampler_task(void*)
 {
-  while (true) {
-  }
+    temperature_batch batch;
+
+    while (true) {
+
+        xSemaphoreTake(sample_request, portMAX_DELAY);
+
+        batch.fill(250);
+
+        xQueueSend(batch_queue, &batch, portMAX_DELAY);
+    }
 }
 
-// TODO(lab, role 3): Construct a crc32_hardware, a crc32_software, and a
-// lab1::input_pin for S1. Loop forever:
-//   1. xQueueReceive(batch_queue, &batch, portMAX_DELAY)
-//   2. Compute the CRC-32 over the batch's bytes with both crc32_hardware and
-//      crc32_software, timing each with a lab2::steady_clock. Print both
-//      durations and confirm that the checksums match. The hardware CRC is
-//      the benchmark. The packet uses the software CRC.
-//   3. Save the software CRC, then read S1. If it is held, flip one bit in
-//      the batch so the saved CRC no longer matches.
-//   4. Write the batch, then the saved CRC, with the serial driver. This task
-//      only writes to the serial driver.
-void transmit_task(void*)
+// S1 is not wired yet. Return true here while the corruption button is held.
+bool corruption_button_held()
 {
-  while (true) {
-  }
+    return false;
+}
+
+// p_parameters is the shared lab6::serial. This task only writes to it.
+void transmit_task(void* p_parameters)
+{
+    auto* uart = static_cast<lab6::serial*>(p_parameters);
+    if (uart == nullptr) {
+        return;
+    }
+
+    temperature_batch batch;
+    lab6::crc32_hardware hardware_crc;
+    crc32_software software_crc;
+
+    while (true) {
+        if (xQueueReceive(batch_queue, &batch, portMAX_DELAY) != pdPASS) {
+            continue;
+        }
+
+        auto const sample_bytes = std::span<std::uint8_t const>{
+            reinterpret_cast<std::uint8_t const*>(batch.data()),
+            sizeof(batch)};
+
+        hardware_crc.reset();
+        hardware_crc.update(sample_bytes);
+        auto const hardware_checksum = hardware_crc.checksum();
+
+        software_crc.reset();
+        software_crc.update(sample_bytes);
+        auto const software_checksum = software_crc.checksum();
+
+        std::printf("CRC hardware: 0x%08lX, software: 0x%08lX\n",
+                    static_cast<unsigned long>(hardware_checksum),
+                    static_cast<unsigned long>(software_checksum));
+
+        if (hardware_checksum != software_checksum) {
+            std::printf("CRC driver mismatch\n");
+        }
+
+        // Corrupt the samples only after the CRC is saved.
+        if (corruption_button_held()) {
+            reinterpret_cast<std::uint8_t*>(batch.data())[0] ^= 0x01U;
+            std::printf("CRC corruption test: flipped one sample bit\n");
+        }
+
+        uart->write(sample_bytes);
+
+        // The packet carries the software CRC. The downloaded task wrote the
+        // hardware checksum after checking that the two results matched.
+        std::array<std::uint8_t, sizeof(std::uint32_t)> crc_bytes{
+            static_cast<std::uint8_t>(software_checksum >> 0),
+            static_cast<std::uint8_t>(software_checksum >> 8),
+            static_cast<std::uint8_t>(software_checksum >> 16),
+            static_cast<std::uint8_t>(software_checksum >> 24)};
+        uart->write(std::span<std::uint8_t const>{crc_bytes.data(),
+                                                  crc_bytes.size()});
+    }
 }
 
 // =============================================================================
@@ -246,6 +314,19 @@ StackType_t blinker_task_stack[blinker_stack_words];
 // `-DDEVICE_ROLE=DEVICE_ROLE_SENSOR` added to the project's build flags -
 // rather than a hardcoded constant, so the role never has to be hand-edited
 // in source.
+
+// Sensor board: request task.
+StaticTask_t request_task_tcb;
+StackType_t request_task_stack[task_stack_words];
+
+// Sensor board: sampler task.
+StaticTask_t sampler_task_tcb;
+StackType_t sampler_task_stack[task_stack_words];
+
+// Sensor board: transmit task.
+StaticTask_t transmit_task_tcb;
+StackType_t transmit_task_stack[task_stack_words];
+
 enum class device_role : std::uint8_t
 {
   sensor,
@@ -255,40 +336,98 @@ enum class device_role : std::uint8_t
 constexpr device_role this_device = device_role::sensor;
 }  // namespace
 
+class test_serial : public lab6::serial
+{
+private:
+
+    std::array<std::uint8_t, 256> buffer{
+        0x32, 0xA5
+    };
+
+    bool driver_configure(const settings&) override
+    {
+        return true;
+    }
+
+    void driver_write(
+        std::span<const std::uint8_t>) override
+    {
+    }
+
+    std::span<const std::uint8_t>
+    driver_receive_buffer() override
+    {
+        return buffer;
+    }
+
+    std::size_t driver_receive_cursor() override
+    {
+        return 2;
+    }
+};
+
 int main()
 {
-  std::printf("Hello, World\n");
+    std::printf("Lab 5 FreeRTOS Test\n");
 
-  if constexpr (this_device == device_role::sensor) {
-    // TODO(lab, role 4): Before the scheduler starts:
-    //   1. Create sample_request and batch_queue.
-    //   2. Create request_task, sampler_task, and transmit_task with
-    //      xTaskCreateStatic().
-    // request_task and transmit_task share one serial_driver. main()'s stack
-    // is reused once the scheduler starts, so don't make it a local here.
-  } else {
-    xTaskCreateStatic(display_task,
-                      "display_task",
-                      task_stack_words,
-                      nullptr,
-                      tskIDLE_PRIORITY + 1,
-                      display_task_stack,
-                      &display_task_tcb);
-    xTaskCreateStatic(blinker_task,
-                      "blinker_task",
-                      blinker_stack_words,
-                      nullptr,
-                      tskIDLE_PRIORITY + 1,
-                      blinker_task_stack,
-                      &blinker_task_tcb);
-  }
+    // Create the binary semaphore.
+    sample_request = xSemaphoreCreateBinaryStatic(
+        &sample_request_storage);
 
-  vTaskStartScheduler();
+    // Create the temperature batch queue.
+    batch_queue = xQueueCreateStatic(
+        1,
+        sizeof(temperature_batch),
+        batch_queue_buffer,
+        &batch_queue_storage);
 
-  // Only reached if vTaskStartScheduler() itself fails to start. The
-  // idle/timer task memory callbacks required by
-  // configSUPPORT_STATIC_ALLOCATION are already supplied by the freertos_kernel
-  // project's dpl/StaticAllocs_freertos.c - don't redefine them here.
-  while (true) {
-  }
+    // Create the temporary UART driver.
+    static test_serial uart;
+
+    lab6::serial* sensor_uart = &uart;
+
+    // Create the request task.
+    xTaskCreateStatic(
+        request_task,
+        "request_task",
+        task_stack_words,
+        sensor_uart,
+        tskIDLE_PRIORITY + 1,
+        request_task_stack,
+        &request_task_tcb);
+
+    // Create the temporary sampler task.
+    xTaskCreateStatic(
+        sampler_task,
+        "sampler_task",
+        task_stack_words,
+        nullptr,
+        tskIDLE_PRIORITY + 1,
+        sampler_task_stack,
+        &sampler_task_tcb);
+
+    // Create the temporary transmit task.
+    xTaskCreateStatic(
+        transmit_task,
+        "transmit_task",
+        task_stack_words,
+        sensor_uart,
+        tskIDLE_PRIORITY + 1,
+        transmit_task_stack,
+        &transmit_task_tcb);
+
+    xTaskCreateStatic(
+        blinker_task,
+        "blinker_task",
+        blinker_stack_words,
+        nullptr,
+        tskIDLE_PRIORITY + 1,
+        blinker_task_stack,
+        &blinker_task_tcb);
+
+    // Start the FreeRTOS scheduler.
+    vTaskStartScheduler();
+
+    while (true) {
+    }
 }
