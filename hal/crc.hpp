@@ -61,4 +61,27 @@ private:
   virtual void driver_update(std::span<std::uint8_t const> p_data) = 0;
   virtual std::uint32_t driver_checksum() = 0;
 };
+
+/**
+ * @brief Register-level driver for the MSPM0G3507 CRC accelerator.
+ *
+ * The implementation computes the reflected CRC-32/IEEE value used by the
+ * software reference implementation. Data may be supplied incrementally with
+ * update(), and reset() starts a new calculation.
+ */
+class crc32_hardware final : public crc32
+{
+public:
+  crc32_hardware();
+
+  crc32_hardware(crc32_hardware const&) = delete;
+  crc32_hardware& operator=(crc32_hardware const&) = delete;
+  crc32_hardware(crc32_hardware&&) = delete;
+  crc32_hardware& operator=(crc32_hardware&&) = delete;
+
+private:
+  void driver_reset() override;
+  void driver_update(std::span<std::uint8_t const> p_data) override;
+  std::uint32_t driver_checksum() override;
+};
 }  // namespace lab6
