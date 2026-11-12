@@ -47,8 +47,10 @@ extern "C" void ADC0_IRQHandler()
 
 // TODO(lab, role 2): Make this class inherit from and implement the
 // `lab6::serial` interface (`serial.hpp`), written register-level - no
-// DriverLib. driver_configure() computes the baud rate dividers from the
-// requested settings. Reception fills a circular buffer from the UART's RX
+// DriverLib. The constructor receives the clock and the serial settings and
+// applies them immediately, including the baud dividers and the RX interrupt.
+// Implement driver_configure() because the interface requires it, and call it
+// from the constructor. Reception fills a circular buffer from the UART's RX
 // interrupt; driver_receive_cursor() returns where the next byte will be
 // written. Make the buffer larger than one packet (256 bytes is safe).
 //
@@ -167,16 +169,17 @@ void sampler_task(void*)
   }
 }
 
-// TODO(lab, role 3): Construct a crc32_hardware and a lab1::input_pin for
-// your corruption-test button (S1 or S2). Loop forever:
+// TODO(lab, role 3): Construct a crc32_hardware, a crc32_software, and a
+// lab1::input_pin for S1. Loop forever:
 //   1. xQueueReceive(batch_queue, &batch, portMAX_DELAY)
 //   2. Compute the CRC-32 over the batch's bytes with both crc32_hardware and
 //      crc32_software, timing each with a lab2::steady_clock. Print both
-//      durations.
-//   3. If the button is held, flip one bit in the batch (after the CRC, so
-//      the CRC no longer matches).
-//   4. Write the batch, then the CRC, with the serial driver. This task only
-//      writes to the serial driver.
+//      durations and confirm that the checksums match. The hardware CRC is
+//      the benchmark. The packet uses the software CRC.
+//   3. Save the software CRC, then read S1. If it is held, flip one bit in
+//      the batch so the saved CRC no longer matches.
+//   4. Write the batch, then the saved CRC, with the serial driver. This task
+//      only writes to the serial driver.
 void transmit_task(void*)
 {
   while (true) {
@@ -187,7 +190,7 @@ void transmit_task(void*)
 // Display board: task
 // =============================================================================
 
-// TODO(lab, role 4): Construct a serial_driver, a crc32_hardware, two
+// TODO(lab, role 4): Construct a serial_driver, a crc32_software, two
 // lab1::input_pin (S1 and S2), and three lab1::output_pin (the RGB LED).
 // Loop forever:
 //   1. Wait for S1 or S2 to be pressed.
@@ -195,14 +198,23 @@ void transmit_task(void*)
 //   3. Wait until packet_size bytes have arrived after the saved position. If
 //      they don't arrive within 500 ms, print a timeout message and go back
 //      to step 1.
-//   4. Recompute the CRC over the received batch and compare it to the
-//      received CRC. On a mismatch, print a message and set the LED magenta
-//      (red + blue).
+//   4. Recompute the CRC over the received batch with crc32_software and
+//      compare it to the received CRC. On a mismatch, print a message and set
+//      the LED magenta (red + blue).
 //   5. Otherwise, average the batch and set the LED: blue for cold, yellow
 //      for warm, red for hot. You pick the bands.
 void display_task(void*)
 {
   while (true) {
+  }
+}
+
+// Toggles LED1 (PA0) every 250 ms so a stuck display_task is visible.
+// TODO(lab, role 4): Construct a lab1::output_pin for PA0 and toggle it.
+void blinker_task(void*)
+{
+  while (true) {
+    vTaskDelay(pdMS_TO_TICKS(250));
   }
 }
 
@@ -214,9 +226,13 @@ void display_task(void*)
 // overflows.
 constexpr std::uint32_t task_stack_words = 512;
 
-// Display board: one task.
+// Display board: display_task plus the LED1 blinker.
 StaticTask_t display_task_tcb;
 StackType_t display_task_stack[task_stack_words];
+
+constexpr std::uint32_t blinker_stack_words = 256;
+StaticTask_t blinker_task_tcb;
+StackType_t blinker_task_stack[blinker_stack_words];
 
 // TODO(lab, role 4): Add a stack and TCB for each of the three sensor tasks.
 
@@ -258,6 +274,13 @@ int main()
                       tskIDLE_PRIORITY + 1,
                       display_task_stack,
                       &display_task_tcb);
+    xTaskCreateStatic(blinker_task,
+                      "blinker_task",
+                      blinker_stack_words,
+                      nullptr,
+                      tskIDLE_PRIORITY + 1,
+                      blinker_task_stack,
+                      &blinker_task_tcb);
   }
 
   vTaskStartScheduler();

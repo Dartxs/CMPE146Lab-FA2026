@@ -30,8 +30,7 @@ The exchange:
    byte) to the sensor board.
 2. **Sensor:** take 64 temperature samples in one DMA transfer, convert
    them, append a CRC-32, and send the packet back. If the sensor board's S1
-   or S2 (your choice) is held while sending, flip one bit in the packet
-   after computing the CRC.
+   is held while sending, flip one bit in the packet after computing the CRC.
 3. **Display:** check the CRC. If it matches, set the RGB LED from the
    readings: blue for cold, yellow for warm, red for hot (you pick the
    bands). If it doesn't, drop the packet, print a message, and turn the LED
@@ -48,6 +47,9 @@ on day one, since both boards depend on it.
   The UART and CRC drivers are register-level.
 - **All DriverLib calls go inside your driver classes.** Don't configure
   peripherals in SysConfig.
+- **Each driver configures its peripheral completely in its constructor.**
+  Don't add a separate `initialize()` or `configure()` phase.
+- Create the FreeRTOS tasks directly with `xTaskCreateStatic()`.
 
 ## FreeRTOS tasks
 
@@ -64,6 +66,13 @@ on day one, since both boards depend on it.
 
 - `display_task`: sends the request on S1/S2, waits for the packet,
   validates the CRC, and sets the LED.
+
+**Blinker task**
+
+`blinker_task` toggles the separate red LED (LED1, PA0) every 250 ms so you
+can see that FreeRTOS keeps scheduling while `display_task` waits. It is not
+required for the protocol, and it is useful for spotting a locked-up system.
+Create it on the display build.
 
 **How the sensor tasks pass data**
 
@@ -172,8 +181,11 @@ Move those calls into your driver.
 <details>
 <summary><b>2. UART: UART driver</b></summary>
 
-- Register-level. `configure()` computes the baud rate dividers from the
-  requested settings.
+- Register-level. The constructor receives the clock and the serial
+  settings, computes the baud rate dividers, configures the UART you pick,
+  and enables the receive interrupt. `lab6::serial` still requires
+  `driver_configure()`; call it from the constructor so the tasks never do a
+  second setup step.
 - Get polled transmit and receive working first so your team can test
   between boards early. Then move receive to the interrupt.
 - On receive, the RX interrupt copies each byte into a circular buffer, and
@@ -196,20 +208,23 @@ Move those calls into your driver.
 - Output must match `crc32_software` (standard CRC-32, as used by zlib).
   Check the accelerator's bit-order options and whether it applies the final
   XOR.
+- The hardware implementation is for the benchmark. Packet creation and
+  validation use the supplied software CRC.
 
 **`transmit_task`**
 
 1. Block in `xQueueReceive(batch_queue, &samples, portMAX_DELAY)`.
 2. Compute the CRC over the samples with `crc32_hardware` and
    `crc32_software`, timing each with `lab2::steady_clock`. Print both
-   durations.
-3. Read the corruption button. If it's held, flip one bit in the samples.
-4. Write the samples, then the CRC.
+   durations and confirm that the results match.
+3. Save the software CRC for the packet, then read S1. If it is held, flip
+   one bit in the samples.
+4. Write the samples, then the saved CRC.
 
 </details>
 
 <details>
-<summary><b>4. Application: <code>request_task</code>, <code>display_task</code>, semaphore, queue, <code>main()</code></b></summary>
+<summary><b>4. Application: <code>request_task</code>, <code>display_task</code>, <code>blinker_task</code>, semaphore, queue, <code>main()</code></b></summary>
 
 **Setup in `main()`**
 
@@ -219,8 +234,14 @@ Move those calls into your driver.
   `xQueueCreateStatic()` (a `StaticQueue_t` plus storage for one
   `std::array<temperature_sample_t, 64>`), and the three sensor tasks with
   `xTaskCreateStatic()`, each with its own stack and TCB.
+- Construct every driver with the settings it needs. Don't call a second
+  initialization function after construction.
+- Give drivers shared with tasks static storage duration. Don't leave them
+  on `main()`'s stack and retain pointers to them after the scheduler starts.
 - The serial driver is shared: `request_task` only reads from it, and
   `transmit_task` only writes to it.
+- On the display build, create both `display_task` and `blinker_task` with
+  `xTaskCreateStatic()`. Give each task its own stack and TCB.
 
 **`request_task`**
 
@@ -235,9 +256,15 @@ Move those calls into your driver.
 2. Wait until the full packet (64 samples plus the 4-byte CRC) has arrived
    after the saved position. If it takes more than 500 ms, print a timeout
    message.
-3. Recompute the CRC over the samples and compare it to the one received.
-   On a mismatch, print a message and set the LED magenta. Otherwise,
-   average the samples and set the LED color.
+3. Recompute the CRC over the samples with `crc32_software` and compare it
+   to the one received. On a mismatch, print a message and set the LED
+   magenta. Otherwise, average the samples and set the LED color.
+
+**`blinker_task`**
+
+- Construct an output for PA0 (LED1), toggle it, and call `vTaskDelay()`
+  between changes. The task must sleep between toggles so other tasks can
+  run.
 
 </details>
 
@@ -258,30 +285,52 @@ Two [LP-MSPM0G3507 LaunchPads](https://www.ti.com/tool/LP-MSPM0G3507), one
 per role. Pick any UART instance, cross-connect TX/RX between the boards,
 and connect their grounds. See [lab1](../lab1_gpio/README.md#hardware) for
 the RGB LED and S1/S2 pins. The temperature sensor is inside the chip and
-needs no wiring.
+needs no wiring. The display board also toggles LED1, the separate red LED
+on PA0, as the FreeRTOS activity indicator.
 
 ## Grading Rubric (120 pt)
 
-1. **ADC + DMA - 15 pts.** `adc_driver` fills the whole buffer in one DMA
-   transfer and sleeps the calling task until the DMA-done interrupt wakes
-   it.
-2. **UART - 15 pts.** Transmits at the configured baud rate and receives
-   into an interrupt-driven circular buffer.
-3. **CRC driver - 15 pts.** `crc32_hardware` matches `crc32_software` and is
-   measurably faster.
-4. **Temperature conversion - 15 pts.** Samples convert to temperatures
-   with at least 0.5 degC resolution.
-5. **Sensor role - 15 pts.** Answers each request with 64 samples and a
-   valid CRC.
-6. **Display role - 15 pts.** S1/S2 requests a batch and the LED shows the
-   temperature. Bad CRCs turn the LED magenta, and both bad CRCs and
-   timeouts print a message.
-7. **Sensor task architecture - 15 pts.** Three statically allocated tasks,
-   the `sample_request` semaphore, and `batch_queue`, as described above.
-8. **Corrupted data demonstration - 5 pts.** Holding the sensor board's
-   button flips a bit, and the display board catches it.
-9. **Code submission - 10 pts.** A PR to your repo's `main` branch, with
-   role owners listed in the description.
+The whole team shares one grade. Roles decide who answers which questions at
+check-off, not who earns which points.
+
+### Role 1: ADC (25 pts)
+
+- **ADC + DMA - 15 pts.** `adc_driver` fills the whole buffer in one DMA
+  transfer and sleeps the calling task until the DMA-done interrupt wakes it.
+- **Temperature conversion - 10 pts.** Samples convert to temperatures with
+  at least 0.5 degC resolution.
+
+### Role 2: UART (25 pts)
+
+- **UART transmit - 10 pts.** Transmits at the configured baud rate.
+- **UART receive - 15 pts.** Receives into an interrupt-driven circular
+  buffer, and `receive_cursor()` behaves as `serial.hpp` describes.
+
+### Role 3: CRC (20 pts)
+
+- **CRC driver - 15 pts.** `crc32_hardware` matches `crc32_software` and is
+  measurably faster.
+- **Corrupted data demonstration - 5 pts.** Holding the sensor board's S1
+  flips a bit, and the display board catches it.
+
+### Role 4: Application (25 pts)
+
+- **Display role - 15 pts.** S1/S2 requests a batch and the LED shows the
+  temperature. Bad CRCs turn the LED magenta, and both bad CRCs and timeouts
+  print a message. LED1 on PA0 continues blinking.
+- **Sensor task architecture - 10 pts.** Three statically allocated tasks,
+  the `sample_request` semaphore, and `batch_queue`, as described above.
+
+### Whole team (25 pts)
+
+- **End-to-end exchange demo - 15 pts.** Everything working together:
+  pressing S1/S2 on the display board gets a fresh batch from the sensor
+  board every time, across repeated presses, without resetting either board.
+- **Code submission - 10 pts.** A PR to your repo's `main` branch, with role
+  owners listed in the description.
+
+Teams of 5 split role 4's points along with its work: display role to one
+person, task architecture to the other.
 
 ## Reference material
 
