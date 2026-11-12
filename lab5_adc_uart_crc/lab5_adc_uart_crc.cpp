@@ -18,6 +18,7 @@
 #include "../hal/serial.hpp"
 #include "../hal/timer.hpp"
 #include "msp0g_uart.hpp"
+#include "msp0g_adc.hpp"
 // =============================================================================
 // Role 1: ADC
 // =============================================================================
@@ -39,8 +40,12 @@ class adc_driver
 // adc_driver::driver_read() somewhere this handler can reach. When
 // DL_ADC12_getPendingInterrupt(ADC0) returns DL_ADC12_IIDX_DMA_DONE, wake that
 // task with vTaskNotifyGiveFromISR() and finish with portYIELD_FROM_ISR().
+// TEMPORARY (ADC test): forward the interrupt to the ADC driver. This is the
+// real handler, not a stub. Keep it when restoring the real sampler_task.
 extern "C" void ADC0_IRQHandler()
-{}
+{
+    msp0g::msp0g_adc::handle_interrupt();
+}
 
 // =============================================================================
 // Role 2: UART
@@ -170,26 +175,68 @@ void request_task(void* p_context)
     }
 }
 
-// TODO(lab, role 1): Construct an adc_driver. Loop forever:
-//   1. xSemaphoreTake(sample_request, portMAX_DELAY)
-//   2. Fill a std::array<std::uint16_t, samples_per_batch> with one call to
-//      adc_driver::read() (one DMA transfer, one task sleep).
-//   3. Convert each raw sample into a temperature_batch. See "Temperature
-//      conversion" in the README for the calibration constants.
-//   4. xQueueSend(batch_queue, &batch, portMAX_DELAY)
+// -----------------------------------------------------------------------------
+// TEMPORARY ADC TEST: this sampler_task reads the ADC directly and prints the
+// results to the console so the ADC driver can be checked on its own. It does
+// not wait on sample_request, does not use batch_queue, and does not send
+// anything over UART. Delete this function and uncomment the REAL sampler_task
+// below to restore the lab design.
+// -----------------------------------------------------------------------------
 void sampler_task(void*)
 {
-    temperature_batch batch;
+    msp0g::msp0g_adc adc;
+    std::uint16_t const trim = msp0g::temperature_trim_sample();
+    std::printf("trim (16-bit) = %u\n", trim);
+
+    std::array<std::uint16_t, samples_per_batch> raw{};
 
     while (true) {
+        adc.read(raw);
 
-        xSemaphoreTake(sample_request, portMAX_DELAY);
+        std::int32_t sum = 0;
+        for (auto sample : raw) {
+            sum += msp0g::to_temperature(sample, trim);
+        }
+        std::int32_t const average =
+          sum / static_cast<std::int32_t>(raw.size());
 
-        batch.fill(250);
+        std::printf("raw[0]=%u raw[63]=%u  %ld.%ld C\n",
+                    raw[0],
+                    raw.back(),
+                    static_cast<long>(average / 10),
+                    static_cast<long>(average % 10));
 
-        xQueueSend(batch_queue, &batch, portMAX_DELAY);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
+
+// -----------------------------------------------------------------------------
+// REAL sampler_task (COMMENTED OUT for the ADC test). Restore it by deleting
+// the TEMPORARY ADC TEST sampler_task above and removing the leading "// " from
+// each line below. It is the original stand-in from the lab skeleton, which
+// still fills the batch with 250 instead of reading the ADC. Its TODO steps
+// describe the final version.
+// -----------------------------------------------------------------------------
+// // TODO(lab, role 1): Construct an adc_driver. Loop forever:
+// //   1. xSemaphoreTake(sample_request, portMAX_DELAY)
+// //   2. Fill a std::array<std::uint16_t, samples_per_batch> with one call to
+// //      adc_driver::read() (one DMA transfer, one task sleep).
+// //   3. Convert each raw sample into a temperature_batch. See "Temperature
+// //      conversion" in the README for the calibration constants.
+// //   4. xQueueSend(batch_queue, &batch, portMAX_DELAY)
+// void sampler_task(void*)
+// {
+//     temperature_batch batch;
+//
+//     while (true) {
+//
+//         xSemaphoreTake(sample_request, portMAX_DELAY);
+//
+//         batch.fill(250);
+//
+//         xQueueSend(batch_queue, &batch, portMAX_DELAY);
+//     }
+// }
 
 // S1 is not wired yet. Return true here while the corruption button is held.
 bool corruption_button_held()
