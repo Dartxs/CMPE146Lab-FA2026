@@ -1,6 +1,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -64,9 +65,21 @@ void sampler_task(void* p_context)
     // --- sampler_task step 3: convert ---------------------------------------
     // Raw ADC code -> temperature in 0.1 degC units, one sample at a time.
     // [README] 1. ADC -> "sampler_task" step 3 and "Temperature conversion".
+    std::int32_t sum = 0;
     for (std::size_t i = 0; i < raw_samples.size(); i++) {
       batch[i] = to_temperature(raw_samples[i], trim_sample);
+      sum += batch[i];
     }
+
+    // TEMPORARY. Shows that a request produced a converted batch. Remove once
+    // the display board is showing the temperature.
+    std::int32_t const average =
+      sum / static_cast<std::int32_t>(raw_samples.size());
+    std::printf("batch raw[0]=%u raw[63]=%u  %ld.%ld C\n",
+                raw_samples[0],
+                raw_samples.back(),
+                static_cast<long>(average / 10),
+                static_cast<long>(average % 10));
 
     // --- sampler_task step 4: hand off to transmit_task ----------------------
     // xQueueSend copies the whole array into the queue, so this task can start

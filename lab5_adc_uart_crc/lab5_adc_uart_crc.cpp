@@ -17,31 +17,18 @@
 #include "../hal/gpio.hpp"
 #include "../hal/serial.hpp"
 #include "../hal/timer.hpp"
-#include "msp0g_uart.hpp"
 #include "msp0g_adc.hpp"
+#include "msp0g_uart.hpp"
+#include "sampler_task.hpp"
+
 // =============================================================================
 // Role 1: ADC
 // =============================================================================
 
-// TODO(lab, role 1): Make this class inherit from and implement the
-// `lab5::adc16_stream` interface (`adc.hpp`) using DriverLib, wired to the
-// internal temperature sensor (ADC0 channel 11). Follow the "1. ADC" guide in
-// the README:
-//   - Constructor: power up ADC0, configure MEM0 for channel 11 against VDDA,
-//     set the sample time, and set up the ADC's DMA trigger and DMA channel.
-//   - driver_read(): re-arm the DMA for the given buffer, save the calling
-//     task's handle, start the conversion, then sleep with ulTaskNotifyTake()
-//     until ADC0_IRQHandler() wakes you. Upscale each 12-bit sample to 16 bits
-//     before returning.
-class adc_driver
-{};
+// The ADC driver is msp0g::msp0g_adc (msp0g_adc.hpp / msp0g_adc.cpp). The
+// sampler is msp0g::sampler_task (sampler_task.hpp / sampler_task.cpp).
 
-// TODO(lab, role 1): Store the handle of the task waiting in
-// adc_driver::driver_read() somewhere this handler can reach. When
-// DL_ADC12_getPendingInterrupt(ADC0) returns DL_ADC12_IIDX_DMA_DONE, wake that
-// task with vTaskNotifyGiveFromISR() and finish with portYIELD_FROM_ISR().
-// TEMPORARY (ADC test): forward the interrupt to the ADC driver. This is the
-// real handler, not a stub. Keep it when restoring the real sampler_task.
+// Real handler. DMA completion wakes the task blocked in adc.read().
 extern "C" void ADC0_IRQHandler()
 {
     msp0g::msp0g_adc::handle_interrupt();
@@ -176,67 +163,17 @@ void request_task(void* p_context)
 }
 
 // -----------------------------------------------------------------------------
-// TEMPORARY ADC TEST: this sampler_task reads the ADC directly and prints the
-// results to the console so the ADC driver can be checked on its own. It does
-// not wait on sample_request, does not use batch_queue, and does not send
-// anything over UART. Delete this function and uncomment the REAL sampler_task
-// below to restore the lab design.
+// TEMPORARY test stand-in for the display board. Gives sample_request once a
+// second so msp0g::sampler_task runs without a real UART request. Delete this
+// task when request_task is fed by the real UART driver.
 // -----------------------------------------------------------------------------
-void sampler_task(void*)
+void sample_request_test_task(void*)
 {
-    msp0g::msp0g_adc adc;
-    std::uint16_t const trim = msp0g::temperature_trim_sample();
-    std::printf("trim (16-bit) = %u\n", trim);
-
-    std::array<std::uint16_t, samples_per_batch> raw{};
-
     while (true) {
-        adc.read(raw);
-
-        std::int32_t sum = 0;
-        for (auto sample : raw) {
-            sum += msp0g::to_temperature(sample, trim);
-        }
-        std::int32_t const average =
-          sum / static_cast<std::int32_t>(raw.size());
-
-        std::printf("raw[0]=%u raw[63]=%u  %ld.%ld C\n",
-                    raw[0],
-                    raw.back(),
-                    static_cast<long>(average / 10),
-                    static_cast<long>(average % 10));
-
+        xSemaphoreGive(sample_request);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
-
-// -----------------------------------------------------------------------------
-// REAL sampler_task (COMMENTED OUT for the ADC test). Restore it by deleting
-// the TEMPORARY ADC TEST sampler_task above and removing the leading "// " from
-// each line below. It is the original stand-in from the lab skeleton, which
-// still fills the batch with 250 instead of reading the ADC. Its TODO steps
-// describe the final version.
-// -----------------------------------------------------------------------------
-// // TODO(lab, role 1): Construct an adc_driver. Loop forever:
-// //   1. xSemaphoreTake(sample_request, portMAX_DELAY)
-// //   2. Fill a std::array<std::uint16_t, samples_per_batch> with one call to
-// //      adc_driver::read() (one DMA transfer, one task sleep).
-// //   3. Convert each raw sample into a temperature_batch. See "Temperature
-// //      conversion" in the README for the calibration constants.
-// //   4. xQueueSend(batch_queue, &batch, portMAX_DELAY)
-// void sampler_task(void*)
-// {
-//     temperature_batch batch;
-//
-//     while (true) {
-//
-//         xSemaphoreTake(sample_request, portMAX_DELAY);
-//
-//         batch.fill(250);
-//
-//         xQueueSend(batch_queue, &batch, portMAX_DELAY);
-//     }
-// }
 
 // S1 is not wired yet. Return true here while the corruption button is held.
 bool corruption_button_held()
@@ -370,6 +307,10 @@ StackType_t request_task_stack[task_stack_words];
 StaticTask_t sampler_task_tcb;
 StackType_t sampler_task_stack[task_stack_words];
 
+// TEMPORARY. Delete with sample_request_test_task.
+StaticTask_t sample_request_test_task_tcb;
+StackType_t sample_request_test_task_stack[blinker_stack_words];
+
 // Sensor board: transmit task.
 StaticTask_t transmit_task_tcb;
 StackType_t transmit_task_stack[task_stack_words];
@@ -443,15 +384,30 @@ int main()
         request_task_stack,
         &request_task_tcb);
 
-    // Create the temporary sampler task.
+    // Real sampler. It waits on sample_request, reads the ADC, converts, and
+    // sends the batch to batch_queue.
+    static msp0g::sampler_context sampler = {};
+    sampler.sample_request = sample_request;
+    sampler.batch_queue = batch_queue;
+
     xTaskCreateStatic(
-        sampler_task,
+        msp0g::sampler_task,
         "sampler_task",
         task_stack_words,
-        nullptr,
+        &sampler,
         tskIDLE_PRIORITY + 1,
         sampler_task_stack,
         &sampler_task_tcb);
+
+    // TEMPORARY. Remove when the real UART delivers request bytes.
+    xTaskCreateStatic(
+        sample_request_test_task,
+        "sample_request_test",
+        blinker_stack_words,
+        nullptr,
+        tskIDLE_PRIORITY + 1,
+        sample_request_test_task_stack,
+        &sample_request_test_task_tcb);
 
     // Create the temporary transmit task.
     xTaskCreateStatic(
