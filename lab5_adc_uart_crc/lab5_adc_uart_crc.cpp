@@ -162,11 +162,8 @@ void request_task(void* p_context)
     }
 }
 
-// -----------------------------------------------------------------------------
-// TEMPORARY test stand-in for the display board. Gives sample_request once a
-// second so msp0g::sampler_task runs without a real UART request. Delete this
-// task when request_task is fed by the real UART driver.
-// -----------------------------------------------------------------------------
+// Stand-in for the display board. Gives sample_request once a second until a
+// real 0xA5 arrives on the UART. Remove this task then.
 void sample_request_test_task(void*)
 {
     while (true) {
@@ -307,7 +304,7 @@ StackType_t request_task_stack[task_stack_words];
 StaticTask_t sampler_task_tcb;
 StackType_t sampler_task_stack[task_stack_words];
 
-// TEMPORARY. Delete with sample_request_test_task.
+// Remove with sample_request_test_task.
 StaticTask_t sample_request_test_task_tcb;
 StackType_t sample_request_test_task_stack[blinker_stack_words];
 
@@ -399,7 +396,7 @@ int main()
         sampler_task_stack,
         &sampler_task_tcb);
 
-    // TEMPORARY. Remove when the real UART delivers request bytes.
+    // Remove when the UART delivers request bytes.
     xTaskCreateStatic(
         sample_request_test_task,
         "sample_request_test",
