@@ -34,7 +34,7 @@ static_assert(sample_time_cycles <= 0x3FF,
 constexpr std::uint32_t power_startup_delay_cycles = 16;
 
 // Task blocked in driver_read(). File scope because the IRQ handler is static.
-volatile TaskHandle_t waiting_task = nullptr;
+TaskHandle_t volatile waiting_task = nullptr;
 
 }  // namespace
 
@@ -42,7 +42,7 @@ namespace msp0g {
 
 std::uint16_t temperature_trim_sample()
 {
-  const auto trim_code =
+  auto const trim_code =
     static_cast<std::uint16_t>(DL_SYSCTL_getTempCalibrationConstant());
 
   return upscale_12_to_16(trim_code);
@@ -118,7 +118,8 @@ void msp0g_adc::driver_read(std::span<std::uint16_t> p_buffer)
 
   // The channel clears its own enable when a transfer finishes.
   DL_DMA_disableChannel(DMA, dma_channel);
-  const auto destination = reinterpret_cast<std::uintptr_t>(p_buffer.data());
+  auto const destination =
+    reinterpret_cast<std::uintptr_t>(p_buffer.data());
   DL_DMA_setDestAddr(DMA, dma_channel, static_cast<std::uint32_t>(destination));
   DL_DMA_setTransferSize(
     DMA, dma_channel, static_cast<std::uint16_t>(p_buffer.size()));
@@ -149,7 +150,7 @@ void msp0g_adc::handle_interrupt()
   }
 
   BaseType_t higher_priority_task_woken = pdFALSE;
-  const TaskHandle_t task = waiting_task;
+  TaskHandle_t const task = waiting_task;
   if (task != nullptr) {
     vTaskNotifyGiveFromISR(task, &higher_priority_task_woken);
   }

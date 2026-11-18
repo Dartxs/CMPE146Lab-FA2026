@@ -32,7 +32,7 @@ inline constexpr std::int32_t temperature_units_per_degree = 10;
  */
 constexpr std::uint16_t upscale_12_to_16(std::uint16_t p_code)
 {
-  const std::uint16_t code = p_code & 0x0FFFU;
+  std::uint16_t const code = p_code & 0x0FFFU;
   return static_cast<std::uint16_t>((code << 4) | (code >> 8));
 }
 
@@ -54,18 +54,18 @@ constexpr temperature_sample_t to_temperature(std::uint16_t p_sample,
   constexpr std::int64_t full_scale = 0xFFFF;
 
   // The sensor coefficient is negative, so a higher voltage is colder.
-  const std::int64_t delta_counts =
+  std::int64_t const delta_counts =
     static_cast<std::int64_t>(p_sample) - static_cast<std::int64_t>(p_trim);
 
   // delta_degrees = -(delta_counts * 3.3 V / full_scale) / 1.8 mV
   // Multiply by the units-per-degree up front so we divide only once.
-  const std::int64_t numerator =
+  std::int64_t const numerator =
     delta_counts * supply_microvolts * temperature_units_per_degree;
-  const std::int64_t denominator = full_scale * sensor_microvolts_per_degree;
+  std::int64_t const denominator = full_scale * sensor_microvolts_per_degree;
 
   // Round to nearest (not toward zero) so the error stays symmetric.
-  const std::int64_t half_denominator = denominator / 2;
-  const std::int64_t rounded_delta =
+  std::int64_t const half_denominator = denominator / 2;
+  std::int64_t const rounded_delta =
     (numerator >= 0 ? numerator + half_denominator
                     : numerator - half_denominator) /
     denominator;
@@ -96,8 +96,8 @@ public:
   /** @brief Configure ADC0 channel 11 and DMA channel 0. */
   msp0g_adc();
 
-  msp0g_adc(const msp0g_adc&) = delete;
-  msp0g_adc& operator=(const msp0g_adc&) = delete;
+  msp0g_adc(msp0g_adc const&) = delete;
+  msp0g_adc& operator=(msp0g_adc const&) = delete;
 
   /**
    * @brief Wake the task blocked in read() on DMA done.
