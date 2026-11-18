@@ -18,4 +18,31 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.core.ccnature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>drivers</name>
+			<type>2</type>
+			<locationURI>PARENT-1-PROJECT_LOC/drivers</locationURI>
+		</link>
+		<link>
+			<name>freertos/port.c</name>
+			<type>1</type>
+			<locationURI>COM_TI_MSPM0_SDK_INSTALL_DIR/kernel/freertos/Source/portable/TI_ARM_CLANG/ARM_CM0/port.c</locationURI>
+		</link>
+		<link>
+			<name>freertos/portasm.c</name>
+			<type>1</type>
+			<locationURI>COM_TI_MSPM0_SDK_INSTALL_DIR/kernel/freertos/Source/portable/TI_ARM_CLANG/ARM_CM0/portasm.c</locationURI>
+		</link>
+		<link>
+			<name>freertos/StaticAllocs_freertos.c</name>
+			<type>1</type>
+			<locationURI>COM_TI_MSPM0_SDK_INSTALL_DIR/kernel/freertos/dpl/StaticAllocs_freertos.c</locationURI>
+		</link>
+		<link>
+			<name>freertos/AppHooks_freertos.c</name>
+			<type>1</type>
+			<locationURI>COM_TI_MSPM0_SDK_INSTALL_DIR/kernel/freertos/dpl/AppHooks_freertos.c</locationURI>
+		</link>
+	</linkedResources>
 </projectDescription>
