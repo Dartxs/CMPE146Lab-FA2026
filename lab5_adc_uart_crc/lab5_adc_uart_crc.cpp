@@ -513,13 +513,13 @@ void display_task(void*)
           sum / static_cast<std::int32_t>(samples.size());
 
         // uncomment for debugging/verifying
-        // std::printf("Average temperature: %ld.%ld C\n",
-        //             static_cast<long>(average / 10),
-        //             static_cast<long>(average % 10));
+        std::printf("Average temperature: %ld.%ld C\n",
+                    static_cast<long>(average / 10),
+                    static_cast<long>(average % 10));
 
-        if (average < 250) {
+        if (average < 230) {
           set_rgb(red, green, blue, false, false, true);
-        } else if (average < 350) {
+        } else if (average < 250) {
           set_rgb(red, green, blue, true, true, false);
         } else {
           set_rgb(red, green, blue, true, false, false);
